@@ -4,8 +4,9 @@ import { StyleSheet, View } from 'react-native';
 
 import {
   Button,
+  ColorPicker,
   FormField,
-  IconOption,
+  IconPicker,
   Screen,
   ScreenHeader,
   SwitchRow,
@@ -13,10 +14,10 @@ import {
 } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { ThemedText } from '@/components/themed-text';
-import { demoHabitIcons, demoScheduleDays, type IoniconName } from '@/constants/demo-data';
+import { demoHabitIcons, demoScheduleDays } from '@/constants/demo-data';
 import { useTheme } from '@/hooks/use-theme';
 import { toWeekdayIndices } from '@/lib/dates';
-import { createHabit, type HabitError } from '@/lib/habits';
+import { DEFAULT_HABIT_COLOR, createHabit, type HabitError } from '@/lib/habits';
 
 /**
  * New habit form — writes a real `habits` row through the habits API.
@@ -24,6 +25,7 @@ import { createHabit, type HabitError } from '@/lib/habits';
  * Field mapping (see `src/lib/habits/types.ts`):
  * - name            -> title
  * - icon            -> icon
+ * - accent colour   -> color
  * - schedule days   -> schedule jsonb `{ target_days }`, and `type` is derived
  * - photo prompt    -> photo_prompt
  * - require photo   -> photo_mandatory
@@ -38,11 +40,11 @@ export default function NewHabitScreen() {
   const theme = useTheme();
 
   const [habitName, setHabitName] = useState('');
-  const [photoPrompt, setPhotoPrompt] = useState('');
   const [photoMandatory, setPhotoMandatory] = useState(true);
   const [requireLiveCamera, setRequireLiveCamera] = useState(true);
   const [scheduleDays, setScheduleDays] = useState<number[]>(demoScheduleDays);
-  const [selectedIcon, setSelectedIcon] = useState<IoniconName>(demoHabitIcons[0].icon);
+  const [selectedIcon, setSelectedIcon] = useState<string>(demoHabitIcons[0].icon);
+  const [selectedColor, setSelectedColor] = useState<string>(DEFAULT_HABIT_COLOR);
 
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,10 +66,10 @@ export default function NewHabitScreen() {
     const result = await createHabit({
       title: habitName,
       icon: selectedIcon,
+      color: selectedColor,
       // `WeekdayPicker` works in `number[]`; narrow it to the domain type.
       targetDays: toWeekdayIndices(scheduleDays),
       photoMandatory,
-      photoPrompt,
       proofSource: requireLiveCamera ? 'camera' : 'library',
     });
 
@@ -77,16 +79,24 @@ export default function NewHabitScreen() {
     }
 
     setIsSaving(false);
-    router.back();
+
+    // Return to the previous screen, or to Today when this screen was opened
+    // directly (deep link / web cold load) and there is nothing to pop.
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace('/today');
   }, [
     habitName,
     handleError,
     isSaving,
     photoMandatory,
-    photoPrompt,
     requireLiveCamera,
     router,
     scheduleDays,
+    selectedColor,
     selectedIcon,
   ]);
 
@@ -94,6 +104,7 @@ export default function NewHabitScreen() {
     <Screen scroll contentContainerStyle={styles.content}>
       <ScreenHeader
         showBack
+        backFallbackHref="/today"
         eyebrow="Recurring"
         title="New habit"
         subtitle={
@@ -109,15 +120,6 @@ export default function NewHabitScreen() {
         placeholder="e.g. Morning Meditation"
         value={habitName}
         onChangeText={setHabitName}
-      />
-
-      <FormField
-        label="Photo prompt (optional)"
-        icon="camera"
-        placeholder="e.g. Photo of your open notebook"
-        helperText="Shown to you right before you snap the proof."
-        value={photoPrompt}
-        onChangeText={setPhotoPrompt}
       />
 
       <SwitchRow
@@ -143,20 +145,17 @@ export default function NewHabitScreen() {
       <WeekdayPicker value={scheduleDays} onChange={setScheduleDays} />
 
       <View style={styles.section}>
-        <ThemedText type="section">Icon</ThemedText>
+        <ThemedText type="section">Appearance</ThemedText>
+        <ThemedText type="caption" themeColor="textSecondary">
+          Pick an icon and the accent colour it uses.
+        </ThemedText>
       </View>
-      <View style={styles.iconGrid}>
-        {demoHabitIcons.map((option) => (
-          <IconOption
-            key={option.label}
-            icon={option.icon}
-            label={option.label}
-            selected={selectedIcon === option.icon}
-            onPress={() => setSelectedIcon(option.icon)}
-            style={styles.iconOption}
-          />
-        ))}
-      </View>
+      {/* Two summary rows instead of the full grid of tiles: the icon list and
+          the colour list each live in their own sheet, so the form stays
+          short. `color` is passed to the icon row so the preview shows both
+          choices together. */}
+      <IconPicker value={selectedIcon} color={selectedColor} onChange={setSelectedIcon} />
+      <ColorPicker value={selectedColor} onChange={setSelectedColor} />
 
       {error !== null && (
         <ThemedText type="caption" style={[styles.error, { color: theme.primary }]}>
@@ -178,20 +177,11 @@ export default function NewHabitScreen() {
 
 const styles = StyleSheet.create({
   content: {
-    paddingTop: Spacing.two,
+    paddingTop: Spacing.four,
     gap: Spacing.three + 2,
   },
   section: {
     gap: Spacing.one,
-  },
-  iconGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.two,
-  },
-  iconOption: {
-    flexBasis: '23%',
-    flexGrow: 1,
   },
   error: {
     textAlign: 'center',

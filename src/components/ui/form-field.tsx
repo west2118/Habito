@@ -1,5 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
+import { useState } from 'react';
+import {
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+  type StyleProp,
+  type TextInputProps,
+  type ViewStyle,
+} from 'react-native';
 
 import { Radii, Spacing } from '@/constants/theme';
 import { ThemedText } from '@/components/themed-text';
@@ -17,10 +26,23 @@ export type FormFieldProps = {
   defaultValue?: string;
   onChangeText?: (text: string) => void;
   multiline?: boolean;
+  /** Renders a password field with a show/hide toggle. */
+  secureTextEntry?: boolean;
+  /** Keyboard/autofill hints, forwarded to the underlying `TextInput`. */
+  keyboardType?: TextInputProps['keyboardType'];
+  autoCapitalize?: TextInputProps['autoCapitalize'];
+  autoCorrect?: TextInputProps['autoCorrect'];
+  autoComplete?: TextInputProps['autoComplete'];
+  textContentType?: TextInputProps['textContentType'];
+  returnKeyType?: TextInputProps['returnKeyType'];
+  onSubmitEditing?: TextInputProps['onSubmitEditing'];
+  /** Blocks editing, e.g. while a sign-in request is in flight. */
+  editable?: boolean;
+  testID?: string;
   style?: StyleProp<ViewStyle>;
 };
 
-/** Labelled text input used on the New habit form. */
+/** Labelled text input used on the New habit and authentication forms. */
 export function FormField({
   label,
   placeholder,
@@ -30,9 +52,21 @@ export function FormField({
   defaultValue,
   onChangeText,
   multiline = false,
+  secureTextEntry = false,
+  keyboardType,
+  autoCapitalize,
+  autoCorrect,
+  autoComplete,
+  textContentType,
+  returnKeyType,
+  onSubmitEditing,
+  editable = true,
+  testID,
   style,
 }: FormFieldProps) {
   const theme = useTheme();
+  // Password fields start masked; the eye icon reveals them on demand.
+  const [isRevealed, setIsRevealed] = useState(false);
 
   return (
     <View style={[styles.container, style]}>
@@ -59,7 +93,30 @@ export function FormField({
           onChangeText={onChangeText}
           multiline={multiline}
           textAlignVertical={multiline ? 'top' : 'center'}
+          secureTextEntry={secureTextEntry && !isRevealed}
+          keyboardType={keyboardType}
+          autoCapitalize={autoCapitalize}
+          autoCorrect={autoCorrect}
+          autoComplete={autoComplete}
+          textContentType={textContentType}
+          returnKeyType={returnKeyType}
+          onSubmitEditing={onSubmitEditing}
+          editable={editable}
+          testID={testID}
         />
+        {secureTextEntry && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={isRevealed ? 'Hide password' : 'Show password'}
+            onPress={() => setIsRevealed((current) => !current)}
+            hitSlop={8}>
+            <Ionicons
+              name={isRevealed ? 'eye-off' : 'eye'}
+              size={18}
+              color={theme.textMuted}
+            />
+          </Pressable>
+        )}
       </View>
       {helperText && (
         <ThemedText type="caption" themeColor="textMuted">

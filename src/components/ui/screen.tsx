@@ -29,6 +29,7 @@ export function Screen({
   const theme = useTheme();
 
   const contentPadding = {
+    paddingTop: Spacing.four,
     paddingBottom: tabBar ? Spacing.five : Spacing.four,
   };
 

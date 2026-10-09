@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { Href } from 'expo-router';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { BackButton } from '@/components/ui/back-button';
@@ -13,6 +14,8 @@ export type ScreenHeaderProps = {
   eyebrow?: string;
   /** Show the circular back button above the header. */
   showBack?: boolean;
+  /** Where the back button goes when there is no history to pop. */
+  backFallbackHref?: Href;
   /** Right-aligned element on the title row (e.g. the notification bell). */
   trailing?: ReactNode;
   style?: StyleProp<ViewStyle>;
@@ -27,12 +30,13 @@ export function ScreenHeader({
   subtitle,
   eyebrow,
   showBack = false,
+  backFallbackHref,
   trailing,
   style,
 }: ScreenHeaderProps) {
   return (
     <View style={[styles.container, style]}>
-      {showBack && <BackButton style={styles.back} />}
+      {showBack && <BackButton fallbackHref={backFallbackHref} style={styles.back} />}
       {eyebrow && (
         <ThemedText type="eyebrow" themeColor="primary">
           {eyebrow}

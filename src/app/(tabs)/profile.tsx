@@ -1,20 +1,28 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Button, Card, Screen, ScreenHeader } from '@/components/ui';
 import { Fonts, Radii, Spacing } from '@/constants/theme';
 import { ThemedText } from '@/components/themed-text';
-import { demoProfile, demoProfileSettings } from '@/constants/demo-data';
+import { demoProfileSettings } from '@/constants/demo-data';
+import { useAuth } from '@/contexts/auth';
+import { useCurrentUser } from '@/hooks/use-current-user';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
- * Profile tab. The reference design doesn't include this screen yet, so it
- * stays intentionally minimal while reusing the Habito design language.
+ * Profile tab. The account card reflects the real signed-in user; the
+ * preference rows are still placeholder copy pending a settings feature.
  */
 export default function ProfileScreen() {
   const theme = useTheme();
-  const router = useRouter();
+  const { signOut } = useAuth();
+  const user = useCurrentUser();
+
+  // This screen sits behind the auth guard, so a missing user is only the
+  // transient frame after sign-out before the router swaps the screen.
+  if (!user) {
+    return null;
+  }
 
   return (
     <Screen scroll tabBar>
@@ -22,12 +30,12 @@ export default function ProfileScreen() {
 
       <Card style={styles.accountCard}>
         <View style={[styles.avatar, { backgroundColor: theme.primary }]}>
-          <Text style={styles.avatarText}>{demoProfile.initials}</Text>
+          <Text style={styles.avatarText}>{user.initials}</Text>
         </View>
         <View style={styles.accountInfo}>
-          <ThemedText type="smallBold">{demoProfile.fullName}</ThemedText>
+          <ThemedText type="smallBold">{user.fullName}</ThemedText>
           <ThemedText type="caption" themeColor="textSecondary">
-            {demoProfile.email}
+            {user.email}
           </ThemedText>
         </View>
       </Card>
@@ -55,7 +63,10 @@ export default function ProfileScreen() {
         label="Sign Out"
         size="md"
         variant="outline"
-        onPress={() => router.replace('/')}
+        // Clearing the session flips the root guard, which returns to welcome.
+        onPress={() => {
+          void signOut();
+        }}
       />
     </Screen>
   );

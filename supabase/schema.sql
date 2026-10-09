@@ -67,6 +67,9 @@ create table if not exists public.habit_logs (
   photo_path    text,
   caption       text,
   streak_at_log integer,
+  -- 'completed' for a logged proof, 'skipped' for a day the user swiped to
+  -- skip. A skipped row carries no photo; unskipping deletes the row.
+  status        text not null default 'completed',
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now(),
   -- One proof per habit per day: stops duplicate submissions when a user
@@ -107,7 +110,9 @@ create table if not exists public.habit_albums (
 -- statements converge the table to the current shape.
 --
 -- Rule of thumb for this repo: a new column goes in BOTH the CREATE TABLE (for
--- fresh installs) AND here (for existing databases).
+-- fresh installs) AND here (for existing databases). Going forward, put new
+-- database changes in a timestamped file under `supabase/migrations/` instead
+-- of asking anyone to re-run this whole script.
 alter table public.profiles add column if not exists id          uuid;
 alter table public.profiles add column if not exists email       text;
 alter table public.profiles add column if not exists full_name   text;
@@ -144,6 +149,7 @@ alter table public.habit_logs add column if not exists photo_url     text;
 alter table public.habit_logs add column if not exists photo_path    text;
 alter table public.habit_logs add column if not exists caption       text;
 alter table public.habit_logs add column if not exists streak_at_log integer;
+alter table public.habit_logs add column if not exists status        text not null default 'completed';
 alter table public.habit_logs add column if not exists created_at    timestamptz not null default now();
 alter table public.habit_logs add column if not exists updated_at    timestamptz not null default now();
 
@@ -242,6 +248,20 @@ begin
     check (length(trim(title)) > 0);
 exception when others then
   raise notice 'skipped habits_title_not_blank_check: %', sqlerrm;
+end;
+$$;
+
+-- A log row is either a completed proof or a skipped day. Skipped rows carry
+-- no photo, so they must stay 'skipped' rather than gaining a completed_at.
+alter table public.habit_logs drop constraint if exists habit_logs_status_check;
+
+do $$
+begin
+  alter table public.habit_logs
+    add constraint habit_logs_status_check
+    check (status in ('completed', 'skipped'));
+exception when others then
+  raise notice 'skipped habit_logs_status_check: %', sqlerrm;
 end;
 $$;
 
@@ -444,8 +464,48 @@ create policy habit_albums_delete_own on public.habit_albums
 -- ---------------------------------------------------------------------------
 -- private, not public: photo URLs are only resolvable through short-lived
 -- signed URLs generated server-side for the owning user, so guessing a path
--- exposes nothing. When the upload module lands, give it its own storage
--- policies that scope the first path segment to the user's id.
+-- exposes nothing.
+--
+-- Object paths are `{user_id}/{habit_id}/{log_date}-{random}.jpg`, so the
+-- first path segment is always the owner's id and every policy below can
+-- scope on it. Re-running this script converges the policies: each is
+-- dropped first, then re-created.
 insert into storage.buckets (id, name, public)
 values ('habit-photos', 'habit-photos', false)
 on conflict (id) do nothing;
+
+drop policy if exists "habit-photos insert own" on storage.objects;
+create policy "habit-photos insert own" on storage.objects
+  for insert to authenticated
+  with check (
+    bucket_id = 'habit-photos'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  );
+
+drop policy if exists "habit-photos read own" on storage.objects;
+create policy "habit-photos read own" on storage.objects
+  for select to authenticated
+  using (
+    bucket_id = 'habit-photos'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  );
+
+drop policy if exists "habit-photos update own" on storage.objects;
+create policy "habit-photos update own" on storage.objects
+  for update to authenticated
+  using (
+    bucket_id = 'habit-photos'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  )
+  with check (
+    bucket_id = 'habit-photos'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  );
+
+drop policy if exists "habit-photos delete own" on storage.objects;
+create policy "habit-photos delete own" on storage.objects
+  for delete to authenticated
+  using (
+    bucket_id = 'habit-photos'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  );

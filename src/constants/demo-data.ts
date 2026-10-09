@@ -92,6 +92,29 @@ export const demoHabitIcons: HabitIconOption[] = [
   { icon: 'locate', label: 'Goal' },
 ];
 
+export type HabitColorOption = {
+  /** Six-digit hex stored on the habit row. */
+  value: string;
+  label: string;
+};
+
+/**
+ * Accent colours offered by the New/Edit habit colour picker.
+ *
+ * The first entry is the brand red the form defaults to, matching
+ * `DEFAULT_HABIT_COLOR` in `@/lib/habits`.
+ */
+export const demoHabitColors: HabitColorOption[] = [
+  { value: '#E1121F', label: 'Red' },
+  { value: '#FF7A1A', label: 'Orange' },
+  { value: '#F5B301', label: 'Amber' },
+  { value: '#2FBF71', label: 'Green' },
+  { value: '#14B8A6', label: 'Teal' },
+  { value: '#3B82F6', label: 'Blue' },
+  { value: '#8B5CF6', label: 'Violet' },
+  { value: '#EC4899', label: 'Pink' },
+];
+
 /** 0 = Monday … 6 = Sunday (matches the reference design's week start). */
 export const demoScheduleDays = [0, 1, 2, 3, 4, 5, 6];
 

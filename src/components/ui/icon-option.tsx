@@ -13,7 +13,7 @@ export type IconOptionProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-/** Selectable icon tile in the New habit "Icon" grid. */
+/** Selectable icon tile shown in the icon picker's bottom sheet. */
 export function IconOption({ icon, label, selected = false, onPress, style }: IconOptionProps) {
   const theme = useTheme();
 

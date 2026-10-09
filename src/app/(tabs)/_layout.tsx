@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 
 import { AppTabBar } from '@/components/app-tab-bar';
+import { Colors } from '@/constants/theme';
 
 /**
  * Main tab group. The tab bar itself is a custom component (raised red "+"
@@ -9,7 +10,18 @@ import { AppTabBar } from '@/components/app-tab-bar';
  */
 export default function TabLayout() {
   return (
-    <Tabs tabBar={(props) => <AppTabBar {...props} />} screenOptions={{ headerShown: false }}>
+    <Tabs
+      tabBar={(props) => <AppTabBar {...props} />}
+      screenOptions={{
+        headerShown: false,
+        // Bottom tabs have no transition by default, so switching tabs is a
+        // hard cut between screens. `shift` slides the outgoing scene aside
+        // while the incoming one follows it in.
+        animation: 'shift',
+        // Keep the dark background painted behind both scenes while they
+        // slide, otherwise the gap between them flashes the window colour.
+        sceneStyle: { backgroundColor: Colors.dark.background },
+      }}>
       <Tabs.Screen
         name="today"
         options={{

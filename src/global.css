@@ -1,3 +1,11 @@
+/* The browser paints its own white behind the app, which flashes through while
+   a route transition is still moving. Keep the page background in sync with the
+   app's dark theme so web transitions stay dark edge to edge. */
+html,
+body {
+  background-color: #000000;
+}
+
 :root {
   --font-display:
     Spline Sans, Inter, ui-sans-serif, system-ui, sans-serif, Apple Color Emoji, Segoe UI Emoji,

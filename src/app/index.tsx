@@ -7,12 +7,11 @@ import { Fonts, Spacing } from '@/constants/theme';
 
 /**
  * Welcome screen: Habito wordmark, tagline and the Get Started / Sign In
- * entry points. Navigation only — real auth is added with the logic phase.
+ * entry points. Both lead into the auth group — the app's tab screens are
+ * behind an authentication guard, so this screen never admits anyone directly.
  */
 export default function WelcomeScreen() {
   const router = useRouter();
-
-  const enterApp = () => router.replace('/today');
 
   return (
     <Screen contentContainerStyle={styles.content}>
@@ -30,8 +29,8 @@ export default function WelcomeScreen() {
       </View>
 
       <View style={styles.actions}>
-        <Button label="Get Started" size="lg" onPress={enterApp} />
-        <Button label="Sign In" size="lg" variant="outline" onPress={enterApp} />
+        <Button label="Get Started" size="lg" onPress={() => router.push('/sign-up')} />
+        <Button label="Sign In" size="lg" variant="outline" onPress={() => router.push('/sign-in')} />
       </View>
 
       <ThemedText type="caption" themeColor="textMuted" style={styles.legal}>

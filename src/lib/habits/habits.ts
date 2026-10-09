@@ -32,7 +32,7 @@ import { fail, ok } from '@/lib/result';
 import { getSupabase } from '@/lib/supabase';
 
 /** How habits are ordered everywhere in the app: newest first. */
-const HABIT_ORDER = 'created_at.desc';
+const HABIT_ORDER_COLUMN = 'created_at';
 
 /**
  * Resolves the signed-in user id.
@@ -173,7 +173,7 @@ export const listHabits = async (options?: { includeArchived?: boolean }): Promi
       query = query.eq('is_archived', false);
     }
 
-    const { data, error } = await query.order(HABIT_ORDER);
+    const { data, error } = await query.order(HABIT_ORDER_COLUMN, { ascending: false });
 
     if (error) {
       return fail(toHabitError(error));
@@ -233,6 +233,10 @@ export const updateHabit = async (
       }
 
       updates.title = title;
+    }
+
+    if (patch.icon !== undefined) {
+      updates.icon = patch.icon;
     }
 
     if (patch.targetDays !== undefined) {

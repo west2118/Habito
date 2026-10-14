@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export type ScreenProps = {
@@ -30,7 +30,7 @@ export function Screen({
 
   const contentPadding = {
     paddingTop: Spacing.four,
-    paddingBottom: tabBar ? Spacing.five : Spacing.four,
+    paddingBottom: tabBar ? Spacing.five + BottomTabInset : Spacing.four,
   };
 
   if (!scroll) {

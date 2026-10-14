@@ -26,6 +26,10 @@ export type { IsoDate, TimeZone, WeekdayIndex } from './dates';
 
 export * from './habits';
 
+export * from './profiles';
+
 export * from './proofs';
 
 export * from './skips';
+
+export * from './stats';

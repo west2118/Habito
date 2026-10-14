@@ -1,12 +1,17 @@
 /**
  * Habito design tokens.
  *
- * The Habito visual design is dark-only, so both color schemes share the same
- * palette for now. When a light theme is designed, add it to `Colors.light`
- * without touching component code — every component reads colors through
- * `useTheme()`.
+ * Two palettes, one set of role names: components never branch on the theme,
+ * they read colors through `useTheme()` and get whichever palette is active.
+ * That is why `light` and `dark` must keep exactly the same keys — `ThemeColor`
+ * is their intersection.
  *
- * There are many other ways to style your app. For example,
+ * The elevation roles keep their *relationship* rather than their literal
+ * values: `backgroundElement` is the resting card surface and
+ * `backgroundElevated` the more raised one, which means darker than the card in
+ * light mode and lighter in dark mode.
+ *
+ * There are many other ways to style your app. For example:
  * [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/),
  * [unistyles](https://reactnativeunistyles.vercel.app), etc.
  */
@@ -36,7 +41,8 @@ export const Palette = {
   },
 } as const;
 
-const habitoColors = {
+
+const darkColors = {
   text: Palette.white,
   textSecondary: Palette.gray[300],
   textMuted: Palette.gray[400],
@@ -45,6 +51,8 @@ const habitoColors = {
   backgroundElevated: Palette.gray[800],
   backgroundSelected: Palette.gray[700],
   border: Palette.gray[700],
+  cardBorder: 'transparent',
+  tabBarBackground: Palette.black,
   primary: Palette.red[500],
   primaryBright: Palette.red[400],
   primaryDark: Palette.red[700],
@@ -53,10 +61,44 @@ const habitoColors = {
   tabBarInactive: Palette.gray[400],
 } as const;
 
+/**
+ * Shape every color scheme must satisfy. Values stay free-form strings so a
+ * scheme can use its own ramp (a `typeof darkColors` annotation would pin each
+ * key to the dark literal and make a real light theme unrepresentable).
+ */
+type ThemeColors = Record<keyof typeof darkColors, string>;
+
+/**
+ * Light theme.
+ *
+ * Pure white canvas (#FFFFFF) with clean, light-white card surfaces (#FAFAFC),
+ * delicate hairline borders (#ECEEF2), and soft near-white elevated controls (#F1F3F6).
+ */
+const lightColors: ThemeColors = {
+  text: '#111827',
+  textSecondary: '#6B7280',
+  textMuted: '#9CA3AF',
+  background: '#FFFFFF',
+  backgroundElement: '#FAFAFC',
+  backgroundElevated: '#F1F3F6',
+  backgroundSelected: '#E2E5EA',
+  border: '#ECEEF2',
+  cardBorder: '#ECEEF2',
+  tabBarBackground: '#FFFFFF',
+  primary: Palette.red[500],
+  primaryBright: Palette.red[400],
+  primaryDark: Palette.red[700],
+  primarySoft: 'rgba(225, 18, 31, 0.10)',
+  onPrimary: Palette.white,
+  tabBarInactive: '#9CA3AF',
+};
+
 export const Colors = {
-  light: habitoColors,
-  dark: habitoColors,
+  light: lightColors,
+  dark: darkColors,
 } as const;
+
+export type ColorScheme = keyof typeof Colors;
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 

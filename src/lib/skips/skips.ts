@@ -63,6 +63,8 @@ export const skipHabitForDay = async (
       user_id: userId.data,
       log_date: logDate,
       status: 'skipped',
+      completed_at: null,
+      photo_path: null,
     });
 
     if (error) {

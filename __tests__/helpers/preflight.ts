@@ -6,7 +6,7 @@
  * once, up front, turns that into a single actionable message.
  */
 
-import { createHabit } from '@/lib/habits';
+import { createHabit, deleteHabit } from '@/lib/habits';
 import type { WeekdayIndex } from '@/lib/dates';
 
 /**
@@ -27,7 +27,6 @@ export const requireWritableHabitsTable = async (): Promise<void> => {
 
   if (probe.ok) {
     // Keep the probe row out of the dataset.
-    const { deleteHabit } = await import('@/lib/habits');
     await deleteHabit(probe.data.id);
     return;
   }

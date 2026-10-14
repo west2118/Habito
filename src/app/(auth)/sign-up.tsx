@@ -53,6 +53,16 @@ export default function SignUpScreen() {
     const result = await signUp({ email, password, fullName });
 
     if (!result.ok) {
+      // The address may belong to a half-registered account (created but never
+      // confirmed). The confirmation panel offers a resend, which is exactly
+      // the recovery that case needs — alongside the sign-in link below it.
+      if (result.error.code === 'user_already_exists') {
+        setAwaitingConfirmation(true);
+        setNotice('That email is already registered. Never confirmed it? Resend the email below — otherwise sign in.');
+        setIsSubmitting(false);
+        return;
+      }
+
       setError(result.error.message);
       setIsSubmitting(false);
       return;

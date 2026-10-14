@@ -11,6 +11,7 @@ export {
   deleteHabit,
   getHabit,
   listHabits,
+  newHabitIdempotencyKey,
   unarchiveHabit,
   updateHabit,
 } from './habits';

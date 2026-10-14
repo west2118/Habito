@@ -26,8 +26,10 @@ const WEEKDAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
 export type MonthCalendarProps = {
   /** Any date inside the month that should be displayed. */
   month: Date;
-  /** Day of the month outlined in red (e.g. today's proof). */
+  /** Day of the month highlighted with a red fill (the current selection). */
   selectedDay?: number;
+  /** Days of the displayed month with at least one completed proof. */
+  activeDays?: ReadonlySet<number>;
   onPrevMonth?: () => void;
   onNextMonth?: () => void;
   onSelectDay?: (day: number) => void;
@@ -38,6 +40,7 @@ export type MonthCalendarProps = {
 export function MonthCalendar({
   month,
   selectedDay,
+  activeDays,
   onPrevMonth,
   onNextMonth,
   onSelectDay,
@@ -86,6 +89,10 @@ export function MonthCalendar({
                 return <View key={`blank-${dayIndex}`} style={styles.dayCell} />;
               }
               const isSelected = day === selectedDay;
+              // A date with at least one completed proof gets the red border so
+              // active days stand out; skip-only dates stay plain. The selected
+              // day fills red instead, so selection never blends into activity.
+              const hasActivity = activeDays?.has(day) ?? false;
               return (
                 <Pressable
                   key={day}
@@ -97,16 +104,19 @@ export function MonthCalendar({
                     styles.dayCell,
                     styles.dayButton,
                     {
-                      backgroundColor: theme.backgroundElevated,
-                      borderColor: isSelected ? theme.primary : 'transparent',
-                      borderWidth: isSelected ? 2 : 0,
+                      backgroundColor: isSelected ? theme.primary : theme.backgroundElevated,
+                      borderColor: !isSelected && hasActivity ? theme.primary : 'transparent',
+                      borderWidth: !isSelected && hasActivity ? 2 : 0,
                       opacity: pressed ? 0.7 : 1,
                     },
                   ]}>
                   <Text
                     style={[
                       styles.dayText,
-                      { color: theme.text, fontWeight: isSelected ? '700' : '500' },
+                      {
+                        color: isSelected ? theme.onPrimary : theme.text,
+                        fontWeight: isSelected || hasActivity ? '700' : '500',
+                      },
                     ]}>
                     {day}
                   </Text>

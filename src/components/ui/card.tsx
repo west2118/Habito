@@ -20,10 +20,18 @@ export function Card({ variant = 'default', padded = true, style, ...rest }: Car
       style={[
         styles.base,
         padded && styles.padded,
-        variant === 'default' && { backgroundColor: theme.backgroundElement },
-        variant === 'elevated' && { backgroundColor: theme.backgroundElevated },
+        variant === 'default' && {
+          backgroundColor: theme.backgroundElement,
+          borderColor: theme.cardBorder,
+          borderWidth: StyleSheet.hairlineWidth,
+        },
+        variant === 'elevated' && {
+          backgroundColor: theme.backgroundElevated,
+          borderColor: theme.cardBorder,
+          borderWidth: StyleSheet.hairlineWidth,
+        },
         variant === 'outline' && {
-          backgroundColor: 'transparent',
+          backgroundColor: theme.backgroundElement,
           borderWidth: 1,
           borderColor: theme.border,
         },

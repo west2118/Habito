@@ -51,7 +51,9 @@ export function Button({
       ? theme.primary
       : variant === 'ghost'
         ? theme.backgroundElevated
-        : 'transparent';
+        : variant === 'outline'
+          ? theme.backgroundElement
+          : 'transparent';
 
   const textColor =
     variant === 'primary' ? theme.onPrimary : variant === 'text' ? theme.primary : theme.text;

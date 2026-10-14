@@ -145,6 +145,7 @@ alter table public.habit_logs add column if not exists user_id       uuid;
 alter table public.habit_logs add column if not exists log_date      date;
 alter table public.habit_logs add column if not exists timestamp     timestamptz not null default now();
 alter table public.habit_logs add column if not exists completed_at  timestamptz;
+alter table public.habit_logs alter column completed_at drop default;
 alter table public.habit_logs add column if not exists photo_url     text;
 alter table public.habit_logs add column if not exists photo_path    text;
 alter table public.habit_logs add column if not exists caption       text;
@@ -175,6 +176,20 @@ update public.habits
 -- is idempotent either way.
 create unique index if not exists habit_logs_habit_date_unique
   on public.habit_logs (habit_id, log_date);
+
+-- One habit name per user, case-insensitive (mirrors
+-- `supabase/migrations/20261009120004_habit_title_unique.sql`). Titles are
+-- trimmed client-side, so `lower(title)` is stable. Wrapped like the
+-- constraints below: pre-existing duplicates print a notice instead of
+-- rolling back the whole script — rename them, then re-run.
+do $$
+begin
+  create unique index habits_user_title_unique
+    on public.habits (user_id, lower(title));
+exception when others then
+  raise notice 'skipped habits_user_title_unique: %. Rename duplicate habit names, then re-run.', sqlerrm;
+end;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Constraints
@@ -312,6 +327,74 @@ drop trigger if exists habit_albums_set_updated_at on public.habit_albums;
 create trigger habit_albums_set_updated_at
   before update on public.habit_albums
   for each row execute function public.set_updated_at();
+
+-- ---------------------------------------------------------------------------
+-- Habit streak counters
+-- ---------------------------------------------------------------------------
+-- A completed proof adds one to `streak_current` and carries `streak_longest`
+-- with it; removing a completed log row takes one back off, floored at zero.
+-- A skipped day breaks the streak instead: `streak_current` resets to 0 (no
+-- increment), the pre-skip streak is kept on the log row for history, and
+-- unskipping only re-opens the day without touching the streak. Mirrors
+-- `supabase/migrations/20261009120005_skip_breaks_streak.sql`.
+create or replace function public.apply_habit_streak_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  prior_streak integer;
+begin
+  if TG_OP = 'INSERT' then
+    if NEW.status = 'completed' then
+      update public.habits
+         set streak_current = streak_current + 1,
+             streak_longest = greatest(streak_longest, streak_current + 1)
+       where id = NEW.habit_id;
+    elsif NEW.status = 'skipped' then
+      -- A skipped day breaks the streak: no increment, straight to zero.
+      select streak_current into prior_streak
+        from public.habits
+       where id = NEW.habit_id;
+
+      update public.habits
+         set streak_current = 0
+       where id = NEW.habit_id;
+
+      -- Remember the pre-skip streak on the log row for history. This UPDATE
+      -- cannot recurse: the triggers below fire on INSERT and DELETE only.
+      update public.habit_logs
+         set streak_at_log = prior_streak
+       where id = NEW.id;
+    end if;
+
+    return NEW;
+  elsif TG_OP = 'DELETE' then
+    if OLD.status = 'completed' then
+      update public.habits
+         set streak_current = greatest(streak_current - 1, 0)
+       where id = OLD.habit_id;
+    end if;
+    -- Deleting a skip (unskip) only re-opens the day: the streak stays
+    -- wherever skipping left it. Completing the day afterwards adds +1.
+
+    return OLD;
+  end if;
+
+  return null;
+end;
+$$;
+
+drop trigger if exists habit_logs_streak_on_insert on public.habit_logs;
+create trigger habit_logs_streak_on_insert
+  after insert on public.habit_logs
+  for each row execute function public.apply_habit_streak_change();
+
+drop trigger if exists habit_logs_streak_on_delete on public.habit_logs;
+create trigger habit_logs_streak_on_delete
+  after delete on public.habit_logs
+  for each row execute function public.apply_habit_streak_change();
 
 -- ---------------------------------------------------------------------------
 -- Auto-create the profile on sign-up

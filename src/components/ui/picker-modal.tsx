@@ -53,7 +53,7 @@ export function PickerModal({ visible, title, subtitle, onClose, children }: Pic
               paddingBottom: insets.bottom + Spacing.three,
             },
           ]}>
-          <View style={styles.grabber} />
+          <View style={[styles.grabber, { backgroundColor: theme.border }]} />
 
           <View style={styles.header}>
             <View style={styles.headerText}>
@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: Radii.pill,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    // Themed, not a white wash: a white grabber is invisible on a light sheet.
     alignSelf: 'center',
     marginBottom: Spacing.two + 2,
   },

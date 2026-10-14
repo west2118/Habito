@@ -387,3 +387,40 @@ export const listDayActivity = async (logDate: IsoDate): Promise<ProofResult<Day
     return fail(toProofError(error));
   }
 };
+
+/**
+ * Returns the dates in `[startIso, endIso]` with at least one completed proof.
+ *
+ * One query for the whole visible month, so the calendar can outline active
+ * days without a request per cell. Skip-only days are excluded on purpose: a
+ * date with no completion and only skips carries no red border. RLS already
+ * scopes the rows to the signed-in user.
+ */
+export const listMonthCompletedDates = async (
+  startIso: IsoDate,
+  endIso: IsoDate,
+): Promise<ProofResult<ReadonlySet<IsoDate>>> => {
+  try {
+    const supabase = await getSupabase();
+    const { data, error } = await supabase
+      .from('habit_logs')
+      .select('log_date')
+      .eq('status', 'completed')
+      .gte('log_date', startIso)
+      .lte('log_date', endIso);
+
+    if (error) {
+      return fail(toProofError(error));
+    }
+
+    const dates = new Set<IsoDate>();
+
+    for (const row of (data ?? []) as { log_date: IsoDate }[]) {
+      dates.add(row.log_date);
+    }
+
+    return ok(dates);
+  } catch (error) {
+    return fail(toProofError(error));
+  }
+};

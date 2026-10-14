@@ -310,7 +310,6 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: 4 / 3,
     borderRadius: 16,
-    backgroundColor: '#1C1C20',
   },
   decisionRow: {
     flexDirection: 'row',

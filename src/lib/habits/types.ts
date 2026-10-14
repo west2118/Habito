@@ -64,6 +64,16 @@ export type CreateHabitInput = {
   dueDate?: string;
   /** Optional target time of day, `HH:MM`. */
   dueTime?: string;
+  /**
+   * Idempotency key for this creation request.
+   *
+   * The caller generates one UUID per form instance and reuses it across
+   * retries. It is sent as the row's `id`, so a double tap, a retry after a
+   * timeout, or two concurrent inserts with the same key can only ever
+   * produce one row: the second insert hits the primary key and resolves to
+   * the existing row instead of creating a duplicate.
+   */
+  idempotencyKey?: string;
 };
 
 /** Fields a client may change after creation. Omitted keys are left alone. */

@@ -2,13 +2,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 
 import { AppTabBar } from '@/components/app-tab-bar';
-import { Colors } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
 /**
  * Main tab group. The tab bar itself is a custom component (raised red "+"
  * FAB in the middle) — see `src/components/app-tab-bar.tsx`.
  */
 export default function TabLayout() {
+  const theme = useTheme();
+
   return (
     <Tabs
       tabBar={(props) => <AppTabBar {...props} />}
@@ -18,9 +20,9 @@ export default function TabLayout() {
         // hard cut between screens. `shift` slides the outgoing scene aside
         // while the incoming one follows it in.
         animation: 'shift',
-        // Keep the dark background painted behind both scenes while they
+        // Keep the active background painted behind both scenes while they
         // slide, otherwise the gap between them flashes the window colour.
-        sceneStyle: { backgroundColor: Colors.dark.background },
+        sceneStyle: { backgroundColor: theme.background },
       }}>
       <Tabs.Screen
         name="today"

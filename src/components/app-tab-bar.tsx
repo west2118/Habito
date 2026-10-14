@@ -2,9 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import type { ComponentProps } from 'react';
 import { router, type Tabs } from 'expo-router';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRef } from 'react';
 
 import { BottomTabInset, Radii, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { claimNavigation } from '@/lib/nav-guard';
 
 /** Props Expo Router passes to a custom `tabBar`. */
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
@@ -13,10 +15,12 @@ const FAB_SIZE = 56;
 
 /**
  * Habito's custom bottom bar: Today · Calendar · [+] · Stats · Profile.
- * The raised red "+" jumps to the New habit screen.
+ * The raised red "+" jumps to the Pick-a-New-One gallery.
  */
 export function AppTabBar({ state, descriptors, navigation, insets }: TabBarProps) {
   const theme = useTheme();
+  // Drops the second push of a rapid double tap on the "+" button.
+  const lastNavRef = useRef(0);
 
   const renderTab = (route: TabBarProps['state']['routes'][number], index: number) => {
     const { options } = descriptors[route.key];
@@ -60,7 +64,7 @@ export function AppTabBar({ state, descriptors, navigation, insets }: TabBarProp
       style={[
         styles.bar,
         {
-          backgroundColor: theme.background,
+          backgroundColor: theme.tabBarBackground,
           borderTopColor: theme.border,
           paddingBottom: insets.bottom,
         },
@@ -74,7 +78,13 @@ export function AppTabBar({ state, descriptors, navigation, insets }: TabBarProp
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Create new habit"
-        onPress={() => router.push('/habit/new')}
+        onPress={() => {
+          if (!claimNavigation(lastNavRef)) {
+            return;
+          }
+
+          router.push('/habit/pick');
+        }}
         style={({ pressed }) => [
           styles.fab,
           {

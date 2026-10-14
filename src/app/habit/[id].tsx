@@ -1,15 +1,15 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import {
   Button,
   ColorPicker,
+  ConfirmModal,
   FormField,
   IconPicker,
   Screen,
   ScreenHeader,
-  SwitchRow,
   WeekdayPicker,
 } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
@@ -19,10 +19,8 @@ import { useTheme } from '@/hooks/use-theme';
 import { toWeekdayIndices } from '@/lib/dates';
 import {
   DEFAULT_HABIT_COLOR,
-  archiveHabit,
   deleteHabit,
   getHabit,
-  unarchiveHabit,
   updateHabit,
   type Habit,
   type HabitError,
@@ -30,7 +28,8 @@ import {
 
 /**
  * Edit habit — same fields as the New habit form, prefilled from the habit
- * row, saved through `updateHabit`. Also owns archive/restore and permanent
+ * row, saved through `updateHabit`. Photo proof with a live-camera shot is
+ * always required, so there are no toggles for it. Also owns permanent
  * delete, so the Today card needs no buttons.
  */
 export default function EditHabitScreen() {
@@ -44,14 +43,13 @@ export default function EditHabitScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [habitName, setHabitName] = useState('');
-  const [photoMandatory, setPhotoMandatory] = useState(true);
-  const [requireLiveCamera, setRequireLiveCamera] = useState(true);
   const [scheduleDays, setScheduleDays] = useState<number[]>([]);
   const [selectedIcon, setSelectedIcon] = useState<string>(demoHabitIcons[0].icon);
   const [selectedColor, setSelectedColor] = useState<string>(DEFAULT_HABIT_COLOR);
 
   const [isSaving, setIsSaving] = useState(false);
-  const [isArchiving, setIsArchiving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -85,8 +83,6 @@ export default function EditHabitScreen() {
       const row = result.data;
       setHabit(row);
       setHabitName(row.title);
-      setPhotoMandatory(row.photo_mandatory);
-      setRequireLiveCamera(row.proof_source !== 'library');
       setScheduleDays([...(row.schedule?.target_days ?? [])]);
       setSelectedIcon(row.icon ?? demoHabitIcons[0].icon);
       setSelectedColor(row.color ?? DEFAULT_HABIT_COLOR);
@@ -104,7 +100,7 @@ export default function EditHabitScreen() {
   const handleError = useCallback((habitError: HabitError) => {
     setError(habitError.message);
     setIsSaving(false);
-    setIsArchiving(false);
+    setIsDeleting(false);
   }, []);
 
   const goBack = useCallback(() => {
@@ -130,8 +126,9 @@ export default function EditHabitScreen() {
       color: selectedColor,
       // `WeekdayPicker` works in `number[]`; narrow it to the domain type.
       targetDays: toWeekdayIndices(scheduleDays),
-      photoMandatory,
-      proofSource: requireLiveCamera ? 'camera' : 'library',
+      // Photo proof with a live-camera shot is mandatory for every habit.
+      photoMandatory: true,
+      proofSource: 'camera',
     });
 
     if (!result.ok) {
@@ -147,71 +144,61 @@ export default function EditHabitScreen() {
     handleError,
     goBack,
     isSaving,
-    photoMandatory,
-    requireLiveCamera,
     scheduleDays,
     selectedColor,
     selectedIcon,
   ]);
 
-  const handleToggleArchive = useCallback(async () => {
-    if (isArchiving || !habitId || !habit) {
+  /** Opens the confirmation dialog; the delete itself waits for a yes. */
+  const handleDeletePress = useCallback(() => {
+    if (!habitId || isDeleting) {
       return;
     }
 
-    setError(null);
-    setIsArchiving(true);
+    setIsConfirmingDelete(true);
+  }, [habitId, isDeleting]);
 
-    const result = habit.is_archived
-      ? await unarchiveHabit(habitId)
-      : await archiveHabit(habitId);
-
-    if (!result.ok) {
-      handleError(result.error);
-      return;
-    }
-
-    setIsArchiving(false);
-    goBack();
-  }, [goBack, habit, habitId, handleError, isArchiving]);
-
-  const handleDelete = useCallback(() => {
+  const handleConfirmDelete = useCallback(async () => {
     if (!habitId) {
       return;
     }
 
-    Alert.alert(
-      'Delete habit?',
-      'This permanently removes the habit and its history. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            void (async () => {
-              const result = await deleteHabit(habitId);
+    setError(null);
+    setIsDeleting(true);
 
-              if (!result.ok) {
-                setError(result.error.message);
-                return;
-              }
+    const result = await deleteHabit(habitId);
 
-              goBack();
-            })();
-          },
-        },
-      ],
-    );
+    setIsDeleting(false);
+    // Closed either way: on failure the message belongs on the form, not
+    // behind a dialog the user has to dismiss first.
+    setIsConfirmingDelete(false);
+
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+
+    goBack();
   }, [goBack, habitId]);
+
+  const handleCancelDelete = useCallback(() => {
+    setIsConfirmingDelete(false);
+  }, []);
 
   if (isLoading) {
     return (
       <Screen contentContainerStyle={styles.content}>
         <ScreenHeader showBack backFallbackHref="/today" title="Edit habit" />
-        <ThemedText type="caption" themeColor="textSecondary" style={styles.centerText}>
-          Loading habit…
-        </ThemedText>
+        <View
+          style={styles.loading}
+          accessible
+          accessibilityRole="progressbar"
+          accessibilityLabel="Loading habit">
+          <ActivityIndicator size="large" color={theme.primary} />
+          <ThemedText type="caption" themeColor="textSecondary">
+            Loading habit…
+          </ThemedText>
+        </View>
       </Screen>
     );
   }
@@ -235,11 +222,7 @@ export default function EditHabitScreen() {
         backFallbackHref="/today"
         eyebrow="Recurring"
         title="Edit habit"
-        subtitle={
-          photoMandatory
-            ? 'Repeats on the days you choose. Photo proof required.'
-            : 'Repeats on the days you choose. No photo needed.'
-        }
+        subtitle="Repeats on the days you choose. Photo proof required."
       />
 
       <FormField
@@ -248,20 +231,6 @@ export default function EditHabitScreen() {
         placeholder="e.g. Morning Meditation"
         value={habitName}
         onChangeText={setHabitName}
-      />
-
-      <SwitchRow
-        title="Require photo proof"
-        description="Turn off to log the habit with just a tap."
-        value={photoMandatory}
-        onValueChange={setPhotoMandatory}
-      />
-
-      <SwitchRow
-        title="Require a live camera"
-        description="Turn off to allow picking from your library."
-        value={requireLiveCamera}
-        onValueChange={setRequireLiveCamera}
       />
 
       <View style={styles.section}>
@@ -293,20 +262,30 @@ export default function EditHabitScreen() {
         size="lg"
         onPress={handleSave}
         // Disabled while in flight so a double tap cannot send two updates.
-        disabled={isSaving || isArchiving}
+        disabled={isSaving || isDeleting}
         style={styles.submit}
       />
 
       <Button
-        label={
-          isArchiving ? 'Working…' : habit.is_archived ? 'Restore habit' : 'Archive habit'
-        }
+        label="Delete habit"
+        // Not the primary red: "Save changes" above is already that action, and
+        // two red buttons on one screen read as equal weight. The destructive
+        // emphasis lives in the confirm dialog, whose Delete button is red.
         variant="outline"
-        onPress={handleToggleArchive}
-        disabled={isSaving || isArchiving}
+        onPress={handleDeletePress}
+        disabled={isSaving || isDeleting}
       />
 
-      <Button label="Delete habit" variant="text" onPress={handleDelete} />
+      <ConfirmModal
+        visible={isConfirmingDelete}
+        title="Delete habit?"
+        message={`"${habitName}" will be permanently removed along with its history. This cannot be undone.`}
+        confirmLabel="Delete"
+        busyLabel="Deleting…"
+        isBusy={isDeleting}
+        onConfirm={() => void handleConfirmDelete()}
+        onCancel={handleCancelDelete}
+      />
     </Screen>
   );
 }
@@ -324,6 +303,11 @@ const styles = StyleSheet.create({
   },
   centerText: {
     textAlign: 'center',
+  },
+  loading: {
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingVertical: Spacing.five,
   },
   submit: {
     marginTop: Spacing.two,

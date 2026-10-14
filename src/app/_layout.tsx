@@ -1,4 +1,4 @@
-import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { Colors } from '@/constants/theme';
 import { AuthProvider, useAuth } from '@/contexts/auth';
+import { ThemePreferenceProvider, useThemeScheme } from '@/contexts/theme';
 
 // Keep the splash screen up until the first frame is ready.
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -24,18 +25,41 @@ SystemUI.setBackgroundColorAsync(Colors.dark.background).catch(() => {
 });
 
 /**
- * Root navigator: the auth group (Sign in / Create account) and the welcome
- * screen are only reachable while signed out; the tab group and pushed screens
- * such as New habit require a session. The app is dark-only, so the dark
- * navigation theme is always used regardless of the device color scheme.
+ * Root layout: owns the theme and the session, and hands both to the
+ * navigator. The app ships dark, but the palette follows whatever was picked
+ * in Profile → Appearance, including "system", which tracks the device.
  */
 export default function RootLayout() {
   return (
+    <ThemePreferenceProvider>
+      <ThemedRoot />
+    </ThemePreferenceProvider>
+  );
+}
+
+/**
+ * Split out from `RootLayout` so it can read the resolved scheme, which only
+ * exists below the provider. It paints the pieces that live outside any
+ * screen: the navigation theme (screen backgrounds and transitions), the
+ * status bar, and the native root view.
+ */
+function ThemedRoot() {
+  const scheme = useThemeScheme();
+  const theme = Colors[scheme];
+
+  // The native root view is visible during screen transitions, so it has to
+  // move with the palette — otherwise popping back to the tabs flashes the
+  // opposite colour.
+  useEffect(() => {
+    SystemUI.setBackgroundColorAsync(theme.background).catch(() => {});
+  }, [theme.background]);
+
+  return (
     // Required for swipe gestures (habit cards) on native. Without it,
     // `Swipeable` rows never activate outside Expo web.
-    <GestureHandlerRootView style={styles.gestureRoot}>
-      <ThemeProvider value={DarkTheme}>
-        <StatusBar style="light" />
+    <GestureHandlerRootView style={[styles.gestureRoot, { backgroundColor: theme.background }]}>
+      <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
         <AuthProvider>
           <RootNavigator />
         </AuthProvider>
@@ -50,6 +74,7 @@ export default function RootLayout() {
  */
 function RootNavigator() {
   const { session, isLoading } = useAuth();
+  const theme = Colors[useThemeScheme()];
 
   // Hold the splash screen until the persisted session has been read, so a
   // signed-in user never sees the welcome/auth screens flash on cold start.
@@ -69,7 +94,7 @@ function RootNavigator() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: Colors.dark.background },
+        contentStyle: { backgroundColor: theme.background },
         // Pin the push/pop animation instead of leaving it to the platform
         // default (which varies by OS version on Android) so every pushed
         // screen — New habit, sign in, sign up — slides identically.
@@ -83,8 +108,12 @@ function RootNavigator() {
       */}
       <Stack.Protected guard={isSignedIn}>
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="habit/pick" />
+        <Stack.Screen name="habit/pick/[category]" />
         <Stack.Screen name="habit/new" />
         <Stack.Screen name="habit/[id]" />
+        <Stack.Screen name="habits" />
+        <Stack.Screen name="collage" />
       </Stack.Protected>
       <Stack.Protected guard={!isSignedIn}>
         <Stack.Screen name="(auth)" />
@@ -97,8 +126,8 @@ function RootNavigator() {
 const styles = StyleSheet.create({
   gestureRoot: {
     flex: 1,
-    // The outermost React view. Painting it means that even before a screen's
-    // own background renders, a transition can never reveal white.
-    backgroundColor: Colors.dark.background,
+    // The colour is applied inline, where the active palette is known. This
+    // layer must never be left to the platform default: it is the outermost
+    // React view, and white would show through during screen transitions.
   },
 });

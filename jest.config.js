@@ -12,11 +12,14 @@
  *    modules the app imports are mapped to small stubs instead.
  *
  * 2. `expo` — the `jest-expo` preset, for component and hook tests that need
- *    React Native itself. Empty for now; it is here so UI tests have a home
- *    without reconfiguring Jest later.
+ *    React Native itself.
  *
  * Both projects share `jest/setup-env.js` so `.env` is loaded the same way.
  */
+
+// Read directly so the preset's `moduleNameMapper` (which carries the tsconfig
+// `@/*` aliases) can be spread into our own mapping instead of being dropped.
+const expoPreset = require('jest-expo/jest-preset');
 
 /** @type {import('jest').Config} */
 module.exports = {
@@ -53,6 +56,21 @@ module.exports = {
     {
       displayName: 'expo',
       preset: 'jest-expo',
+      // Metro resolves the `@/global.css` side-effect import in
+      // `constants/theme.ts`; Jest would try to parse the stylesheet as
+      // JavaScript and fail on its first rule. Entries are matched in order,
+      // so the stylesheet rule has to come before the preset's `@/*` alias —
+      // otherwise the alias rewrites the specifier to the real `.css` file
+      // first and this never runs.
+      moduleNameMapper: {
+        '\\.css$': '<rootDir>/jest/stubs/empty.js',
+        // AsyncStorage reaches for the native module, which does not exist
+        // under Jest. Same official mock the integration project uses, mapped
+        // once here so no component test has to remember to stub it.
+        '^@react-native-async-storage/async-storage$':
+          '@react-native-async-storage/async-storage/jest/async-storage-mock',
+        ...expoPreset.moduleNameMapper,
+      },
       testMatch: ['<rootDir>/__tests__/**/*.test.tsx'],
       setupFiles: ['<rootDir>/jest/setup-env.js'],
     },

@@ -20,7 +20,7 @@ import { Radii, Spacing } from '@/constants/theme';
 import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
 import { formatShortDate, getTodayIsoDate, type IsoDate } from '@/lib/dates';
-import { listDayActivity, type DayActivity } from '@/lib/proofs';
+import { listDayActivity, listMonthCompletedDates, type DayActivity } from '@/lib/proofs';
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -97,6 +97,7 @@ export default function TimelineScreen() {
   const [selectedIso, setSelectedIso] = useState<IsoDate>(() => getTodayIsoDate());
 
   const [activities, setActivities] = useState<DayActivity[]>([]);
+  const [activeDays, setActiveDays] = useState<ReadonlySet<number>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewerRequest, setViewerRequest] = useState<ProofViewerRequest | null>(null);
@@ -128,6 +129,51 @@ export default function TimelineScreen() {
     useCallback(() => {
       void loadActivity(selectedIso);
     }, [loadActivity, selectedIso]),
+  );
+
+  // Outlines every date of the visible month that holds a completed proof.
+  // Reloads with the month and on focus; a failure only clears the outlines —
+  // the selected day's list below still loads on its own.
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      void (async () => {
+        const year = month.getFullYear();
+        const monthIndex = month.getMonth();
+        const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+        const start = isoForDay(month, 1);
+        const end = isoForDay(month, lastDay);
+
+        const result = await listMonthCompletedDates(start, end);
+
+        if (!active) {
+          return;
+        }
+
+        if (!result.ok) {
+          if (__DEV__) {
+            console.warn('[Calendar] listMonthCompletedDates failed:', result.error);
+          }
+          setActiveDays(new Set());
+          return;
+        }
+
+        const days = new Set<number>();
+
+        for (const iso of result.data) {
+          if (iso.startsWith(start.slice(0, 7))) {
+            days.add(Number(iso.slice(8, 10)));
+          }
+        }
+
+        setActiveDays(days);
+      })();
+
+      return () => {
+        active = false;
+      };
+    }, [month]),
   );
 
   const moveMonth = (offset: number) =>
@@ -168,6 +214,7 @@ export default function TimelineScreen() {
       <MonthCalendar
         month={month}
         selectedDay={selectedDayNumber}
+        activeDays={activeDays}
         onPrevMonth={() => moveMonth(-1)}
         onNextMonth={() => moveMonth(1)}
         onSelectDay={handleSelectDay}

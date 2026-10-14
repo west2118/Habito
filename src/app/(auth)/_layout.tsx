@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 
-import { Colors } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
 /**
  * Authentication route group: the Sign in and Create account screens.
@@ -10,11 +10,13 @@ import { Colors } from '@/constants/theme';
  * router redirects into the app.
  */
 export default function AuthLayout() {
+  const theme = useTheme();
+
   return (
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: Colors.dark.background },
+        contentStyle: { backgroundColor: theme.background },
         // Match the root stack's push animation so moving between Sign in and
         // Create account slides the same way as the rest of the app.
         animation: 'slide_from_right',

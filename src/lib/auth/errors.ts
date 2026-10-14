@@ -56,7 +56,8 @@ export type AuthError = {
 export const AUTH_ERROR_MESSAGES: Readonly<Record<AuthErrorCode, string>> = Object.freeze({
   invalid_credentials: 'That email and password combination does not match an account.',
   email_not_confirmed: 'Confirm your email address first, then sign in.',
-  user_already_exists: 'An account with that email already exists. Try signing in.',
+  user_already_exists:
+    'An account with that email already exists. Try signing in — or check your inbox if you never confirmed it.',
   email_address_invalid: 'That does not look like a valid email address.',
   weak_password: 'Choose a stronger password — at least 8 characters.',
   over_request_rate_limit: 'Too many attempts. Wait a moment and try again.',

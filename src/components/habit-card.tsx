@@ -40,6 +40,12 @@ export type HabitCardProps = {
    * opens the proof photo.
    */
   completed?: boolean;
+  /**
+   * When false the row is read-only: no swipe gestures and no proof button —
+   * tapping it still opens the editor. Day previews use this, because skip
+   * and proof only make sense on the live day.
+   */
+  swipeable?: boolean;
   /** Tap the card — opens the edit screen. */
   onPress?: () => void;
   /** Swipe left-to-right (or tap the revealed action) — skip for today. */
@@ -63,6 +69,7 @@ type SwipeActionProps = {
   textColor: string;
   accessibilityLabel: string;
   onPress: () => void;
+  style?: StyleProp<ViewStyle>;
 };
 
 /**
@@ -77,6 +84,7 @@ function SwipeAction({
   textColor,
   accessibilityLabel,
   onPress,
+  style,
 }: SwipeActionProps) {
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: interpolate(progress.value, [0, 1], [0.3, 1], Extrapolation.CLAMP),
@@ -86,7 +94,7 @@ function SwipeAction({
   }));
 
   return (
-    <Animated.View style={[styles.sideAction, { backgroundColor }, animatedStyle]}>
+    <Animated.View style={[styles.sideAction, { backgroundColor }, animatedStyle, style]}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
@@ -112,8 +120,22 @@ function SwipeAction({
  *
  * A full swipe past the threshold fires the action; a partial swipe reveals
  * the action as a tappable target for the same handler.
+ *
+ * Pass `swipeable={false}` for a read-only row: the gestures and the proof
+ * button are dropped, leaving a plain tap through to the editor.
  */
-export function HabitCard({ habit, skipped = false, completed = false, onPress, onSkip, onUnskip, onProof, onViewProof, style }: HabitCardProps) {
+export function HabitCard({
+  habit,
+  skipped = false,
+  completed = false,
+  swipeable = true,
+  onPress,
+  onSkip,
+  onUnskip,
+  onProof,
+  onViewProof,
+  style,
+}: HabitCardProps) {
   const theme = useTheme();
   const swipeableRef = useRef<SwipeableMethods>(null);
 
@@ -162,6 +184,7 @@ export function HabitCard({ habit, skipped = false, completed = false, onPress, 
         textColor={theme.text}
         accessibilityLabel={skipped ? 'Unskip habit for today' : 'Skip habit for today'}
         onPress={handleSkipAction}
+        style={styles.leftAction}
       />
     ),
     [handleSkipAction, skipped, theme.backgroundElevated, theme.text],
@@ -177,10 +200,76 @@ export function HabitCard({ habit, skipped = false, completed = false, onPress, 
         textColor={theme.onPrimary}
         accessibilityLabel="Log photo proof"
         onPress={handleProofAction}
+        style={styles.rightAction}
       />
     ),
     [handleProofAction, theme.onPrimary, theme.primary],
   );
+
+  const row = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Edit ${habit.title}`}
+      onPress={onPress}>
+      <Card style={[styles.card, skipped && styles.cardSkipped, style]}>
+        <View style={styles.iconTile}>
+          {/* A translucent fill rather than a solid accent, so the icon stays
+              legible on the dark card. An overlay keeps this working for any
+              hex without a colour-space conversion. */}
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: accent, opacity: 0.18 }]} />
+          <Ionicons name={iconName} size={20} color={accent} />
+        </View>
+
+        <View style={styles.info}>
+          {/* Done for the day reads as struck through, so the list shows at a
+              glance which habits are already ticked off. */}
+          <ThemedText
+            type="smallBold"
+            numberOfLines={1}
+            themeColor={completed ? 'textSecondary' : undefined}
+            style={completed && styles.titleDone}>
+            {habit.title}
+          </ThemedText>
+          <View style={styles.chips}>
+            <Chip
+              label={`${habit.streakDays}d`}
+              tone="red"
+              icon={<Ionicons name="flame" size={11} color={theme.primary} />}
+            />
+            {skipped && <Chip label="Skipped" tone="muted" />}
+            {completed && (
+              <Chip
+                label="Done"
+                tone="red"
+                icon={<Ionicons name="checkmark" size={11} color={theme.primary} />}
+              />
+            )}
+          </View>
+        </View>
+
+        {/* The proof button only exists where proof can be logged or revisited
+            — i.e. alongside the swipe actions. */}
+        {completed && swipeable ? (
+          <Button
+            label="Proof"
+            size="sm"
+            variant="outline"
+            fullWidth={false}
+            icon={<Ionicons name="camera" size={14} color={theme.text} />}
+            onPress={onViewProof}
+          />
+        ) : (
+          <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+        )}
+      </Card>
+    </Pressable>
+  );
+
+  // Read-only rows skip the swipe container entirely, so there is nothing to
+  // drag and no hidden action to discover.
+  if (!swipeable) {
+    return row;
+  }
 
   return (
     <Swipeable
@@ -198,60 +287,7 @@ export function HabitCard({ habit, skipped = false, completed = false, onPress, 
       overshootFriction={8}
       containerStyle={styles.swipeable}
       childrenContainerStyle={styles.pressable}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Edit ${habit.title}`}
-        onPress={onPress}>
-        <Card style={[styles.card, skipped && styles.cardSkipped, style]}>
-          <View style={styles.iconTile}>
-            {/* A translucent fill rather than a solid accent, so the icon stays
-                legible on the dark card. An overlay keeps this working for any
-                hex without a colour-space conversion. */}
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: accent, opacity: 0.18 }]} />
-            <Ionicons name={iconName} size={20} color={accent} />
-          </View>
-
-          <View style={styles.info}>
-            {/* Done for the day reads as struck through, so the list shows at a
-                glance which habits are already ticked off. */}
-            <ThemedText
-              type="smallBold"
-              numberOfLines={1}
-              themeColor={completed ? 'textSecondary' : undefined}
-              style={completed && styles.titleDone}>
-              {habit.title}
-            </ThemedText>
-            <View style={styles.chips}>
-              <Chip
-                label={`${habit.streakDays}d`}
-                tone="red"
-                icon={<Ionicons name="flame" size={11} color={theme.primary} />}
-              />
-              {skipped && <Chip label="Skipped" tone="muted" />}
-              {completed && (
-                <Chip
-                  label="Done"
-                  tone="red"
-                  icon={<Ionicons name="checkmark" size={11} color={theme.primary} />}
-                />
-              )}
-            </View>
-          </View>
-
-          {completed ? (
-            <Button
-              label="Proof"
-              size="sm"
-              variant="outline"
-              fullWidth={false}
-              icon={<Ionicons name="camera" size={14} color={theme.text} />}
-              onPress={onViewProof}
-            />
-          ) : (
-            <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
-          )}
-        </Card>
-      </Pressable>
+      {row}
     </Swipeable>
   );
 }
@@ -300,6 +336,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     // Match the card's vertical footprint inside the row.
     marginVertical: 1,
+  },
+  leftAction: {
+    marginRight: Spacing.two,
+  },
+  rightAction: {
+    marginLeft: Spacing.two,
   },
   sideActionHit: {
     flex: 1,

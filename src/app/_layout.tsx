@@ -1,3 +1,7 @@
+// Imported by weight path, not from the package root: the root re-exports every
+// Poppins cut, which would bundle all 18 files (≈3 MB) to use one of them.
+import { Poppins_800ExtraBold } from '@expo-google-fonts/poppins/800ExtraBold';
+import { useFonts } from 'expo-font';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -30,6 +34,17 @@ SystemUI.setBackgroundColorAsync(Colors.dark.background).catch(() => {
  * in Profile → Appearance, including "system", which tracks the device.
  */
 export default function RootLayout() {
+  // The title/wordmark font ships as a plain asset (no native module), so this
+  // one call covers iOS, Android and web. Rendering nothing until it is ready
+  // keeps the first frame from painting a fallback title font — the splash
+  // screen stays up meanwhile, because it is only hidden by `RootNavigator`
+  // below. A failed load resolves `fontError` and renders with the fallbacks.
+  const [fontsLoaded, fontError] = useFonts({ Poppins_800ExtraBold });
+
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
+
   return (
     <ThemePreferenceProvider>
       <ThemedRoot />
@@ -76,8 +91,9 @@ function RootNavigator() {
   const { session, isLoading } = useAuth();
   const theme = Colors[useThemeScheme()];
 
-  // Hold the splash screen until the persisted session has been read, so a
-  // signed-in user never sees the welcome/auth screens flash on cold start.
+  // Hold the splash screen until the persisted session has been read (and the
+  // bundled title font has loaded, see `RootLayout`), so a signed-in user never
+  // sees the welcome/auth screens — or a fallback font — flash on cold start.
   useEffect(() => {
     if (!isLoading) {
       SplashScreen.hideAsync().catch(() => {});

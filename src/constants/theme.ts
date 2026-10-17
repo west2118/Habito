@@ -102,7 +102,8 @@ export type ColorScheme = keyof typeof Colors;
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
-export const Fonts = Platform.select({
+/** Platform system families; the bundled family below is named the same everywhere. */
+const systemFonts: Record<'sans' | 'serif' | 'rounded' | 'mono', string> = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */
     sans: 'system-ui',
@@ -126,6 +127,19 @@ export const Fonts = Platform.select({
     mono: 'var(--font-mono)',
   },
 });
+
+export const Fonts = {
+  ...systemFonts,
+  /**
+   * Poppins ExtraBold, bundled as an asset and registered in
+   * `src/app/_layout.tsx` — the page titles and the brand letter marks. It
+   * sits outside `systemFonts` because the registered family name is identical
+   * on iOS, Android and web. The file carries the weight, so call sites set
+   * only `fontFamily` (a `fontWeight` on a static face would just synthesize a
+   * second, fake bold).
+   */
+  display: 'Poppins_800ExtraBold',
+};
 
 export const Spacing = {
   half: 2,

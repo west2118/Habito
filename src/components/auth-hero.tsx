@@ -64,9 +64,8 @@ const styles = StyleSheet.create({
     }),
   },
   logoLetter: {
-    fontFamily: Fonts.serif,
+    fontFamily: Fonts.display,
     fontSize: 32,
-    fontWeight: '700',
     color: '#FFFFFF',
   },
   eyebrow: {

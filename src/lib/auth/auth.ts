@@ -19,6 +19,10 @@ import type { Session, User } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
 
 import { createAuthError, fail, ok, toAuthError, type AuthResult } from '@/lib/auth/errors';
+import {
+  isVerificationCodeFormatValid,
+  VERIFICATION_CODE_LENGTH,
+} from '@/lib/auth/otp';
 import { getSupabase } from '@/lib/supabase';
 
 /**
@@ -308,6 +312,57 @@ export const resendConfirmationEmail = async (email: string): Promise<AuthResult
     }
 
     return ok(null);
+  } catch (error) {
+    return fail(toAuthError(error));
+  }
+};
+
+/**
+ * Confirms a new account with the 6-digit code from its confirmation email.
+ *
+ * Until this succeeds the account is unusable: `signUp` issues no session and
+ * sign-in rejects the address with `email_not_confirmed`, so an unverified
+ * user can never reach the app.
+ *
+ * Dashboard setup this requires (one-off, not code):
+ * - Authentication -> Email Templates -> "Confirm signup" must render the
+ *   code, i.e. its body contains `{{ .Token }}` (a 6-digit number), instead of
+ *   — or in addition to — the confirmation link.
+ * - Authentication -> Configuration -> "Email OTP expiry" (or the
+ *   `GOTRUE_MAILER_OTP_EXPIRY` env on self-hosted) must be 900 seconds, so the
+ *   server enforces the same 15-minute window the UI counts down.
+ *
+ * @returns the active session for the now-confirmed account.
+ */
+export const verifySignUpCode = async (
+  email: string,
+  code: string,
+): Promise<AuthResult<Session>> => {
+  if (!isVerificationCodeFormatValid(code)) {
+    return fail(
+      createAuthError('validation_failed', {
+        message: `Enter the ${VERIFICATION_CODE_LENGTH}-digit code from your email.`,
+      }),
+    );
+  }
+
+  try {
+    const supabase = await getSupabase();
+    const { data, error } = await supabase.auth.verifyOtp({
+      email: normalizeEmail(email),
+      token: code.trim(),
+      type: 'signup',
+    });
+
+    if (error) {
+      return fail(toAuthError(error));
+    }
+
+    if (!data.session) {
+      return fail(createAuthError('unknown_error'));
+    }
+
+    return ok(data.session);
   } catch (error) {
     return fail(toAuthError(error));
   }

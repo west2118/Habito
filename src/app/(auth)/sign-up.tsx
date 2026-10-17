@@ -1,29 +1,29 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { AuthHero } from '@/components/auth-hero';
 import { ThemedText } from '@/components/themed-text';
-import { BackButton, Button, Card, FormField, Screen } from '@/components/ui';
-import { Radii, Spacing } from '@/constants/theme';
+import { BackButton, Button, FormField, Screen } from '@/components/ui';
+import { VerifyCodePanel } from '@/components/verify-code-panel';
+import { Spacing } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth';
 import { useTheme } from '@/hooks/use-theme';
-import { resendConfirmationEmail } from '@/lib/auth';
+import { requestSignupCode } from '@/lib/auth';
 
 /**
  * Create an account with email and password.
  *
- * Two outcomes are possible after a successful request:
- * - The project auto-confirms emails, so a session is returned and the root
- *   route guard moves the user straight into the app.
- * - The project requires confirmation, so `needsEmailConfirmation` is true and
- *   we swap the form for a "check your inbox" panel with a resend action.
+ * Gated sign-up: submitting only emails a 6-digit code (15-minute lifetime)
+ * and the account is created inside the verification call. A wrong/expired
+ * code — or a user who walks away — leaves no account behind, and that email
+ * can never sign in because it was never registered. The password stays in
+ * screen state between the two steps and is never stored anywhere.
  */
 export default function SignUpScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { signUp } = useAuth();
+  const { completeGatedSignup } = useAuth();
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -33,6 +33,8 @@ export default function SignUpScreen() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+  // When the current code was sent — starts the panel's 15-minute countdown.
+  const [codeSentAt, setCodeSentAt] = useState<number | null>(null);
 
   const handleSubmit = useCallback(async () => {
     if (isSubmitting) {
@@ -40,7 +42,7 @@ export default function SignUpScreen() {
     }
 
     // Checked here rather than in the API: confirm-password is a UI concern,
-    // Supabase only ever sees the single password.
+    // the server only ever sees the single password.
     if (password !== confirmPassword) {
       setError('Those passwords do not match.');
       return;
@@ -50,61 +52,33 @@ export default function SignUpScreen() {
     setNotice(null);
     setIsSubmitting(true);
 
-    const result = await signUp({ email, password, fullName });
-
-    if (!result.ok) {
-      // The address may belong to a half-registered account (created but never
-      // confirmed). The confirmation panel offers a resend, which is exactly
-      // the recovery that case needs — alongside the sign-in link below it.
-      if (result.error.code === 'user_already_exists') {
-        setAwaitingConfirmation(true);
-        setNotice('That email is already registered. Never confirmed it? Resend the email below — otherwise sign in.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      setError(result.error.message);
-      setIsSubmitting(false);
-      return;
-    }
-
-    if (result.data.needsEmailConfirmation) {
-      setAwaitingConfirmation(true);
-      setIsSubmitting(false);
-      return;
-    }
-
-    // Auto-confirmed: the root guard redirects into the app on the next render.
-  }, [confirmPassword, email, fullName, isSubmitting, password, signUp]);
-
-  const handleResend = useCallback(async () => {
-    if (isSubmitting) {
-      return;
-    }
-
-    setError(null);
-    setNotice(null);
-    setIsSubmitting(true);
-
-    const result = await resendConfirmationEmail(email);
-
-    if (result.ok) {
-      setNotice('Confirmation email sent again.');
-    } else {
-      setError(result.error.message);
-    }
+    // Step 1 sends the code only — no account exists after this call.
+    const result = await requestSignupCode({ email, fullName });
 
     setIsSubmitting(false);
-  }, [email, isSubmitting]);
+
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+
+    setAwaitingConfirmation(true);
+    setCodeSentAt(Date.now());
+  }, [confirmPassword, email, fullName, isSubmitting, password]);
 
   const handleBack = useCallback(() => {
+    if (awaitingConfirmation) {
+      setAwaitingConfirmation(false);
+      return;
+    }
+
     if (router.canGoBack()) {
       router.back();
       return;
     }
 
     router.replace('/');
-  }, [router]);
+  }, [awaitingConfirmation, router]);
 
   if (awaitingConfirmation) {
     return (
@@ -115,18 +89,8 @@ export default function SignUpScreen() {
           <AuthHero
             eyebrow="Almost there"
             title="Check your inbox"
-            subtitle={`We sent a confirmation link to ${email.trim()}. Tap it to activate your account.`}
+            subtitle={`We sent a 6-digit code to ${email.trim()}. Enter it within 15 minutes to activate your account.`}
           />
-
-          <Card style={styles.confirmCard}>
-            <View style={[styles.confirmIcon, { backgroundColor: theme.primarySoft }]}>
-              <Ionicons name="mail-unread" size={26} color={theme.primary} />
-            </View>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.centerText}>
-              Confirming your email keeps your photo proofs and streaks tied to an account only you
-              can access.
-            </ThemedText>
-          </Card>
 
           {notice !== null && (
             <ThemedText
@@ -138,23 +102,24 @@ export default function SignUpScreen() {
             </ThemedText>
           )}
 
-          {error !== null && (
-            <ThemedText
-              type="caption"
-              style={[styles.centerText, { color: theme.primary }]}
-              testID="sign-up-error">
-              {error}
-            </ThemedText>
+          {codeSentAt !== null && (
+            <VerifyCodePanel
+              email={email}
+              sentAt={codeSentAt}
+              // Step 2 creates the account inside the verification call: only
+              // a correct, in-window code produces an account, and verifying
+              // signs it straight in via the auth context.
+              verify={(code) => completeGatedSignup(email, code, password, fullName)}
+              resend={() => requestSignupCode({ email, fullName })}
+              onCodeResent={setCodeSentAt}
+              onChangeEmail={() => setAwaitingConfirmation(false)}
+              // Verifying applies the session in the auth context, so the
+              // root guard moves the new account into the app on next render.
+              onVerified={() => {}}
+              testIDPrefix="sign-up-verify"
+            />
           )}
 
-          <Button
-            label={isSubmitting ? 'Sending…' : 'Resend email'}
-            size="lg"
-            variant="outline"
-            onPress={handleResend}
-            disabled={isSubmitting}
-            testID="sign-up-resend"
-          />
           <Button
             label="Back to sign in"
             size="md"
@@ -246,7 +211,7 @@ export default function SignUpScreen() {
         )}
 
         <Button
-          label={isSubmitting ? 'Creating account…' : 'Create Account'}
+          label={isSubmitting ? 'Sending code…' : 'Send verification code'}
           size="lg"
           onPress={handleSubmit}
           disabled={isSubmitting}
@@ -289,18 +254,6 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: Spacing.three,
-  },
-  confirmCard: {
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingVertical: Spacing.four,
-  },
-  confirmIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: Radii.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   centerText: {
     textAlign: 'center',

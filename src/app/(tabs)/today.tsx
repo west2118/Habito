@@ -15,6 +15,7 @@ import { HabitCard } from '@/components/habit-card';
 import { HabitCardSkeleton } from '@/components/habit-card-skeleton';
 import { ProofViewer, type ProofViewerRequest } from '@/components/proof-viewer';
 import { StreakHeroCard } from '@/components/streak-hero-card';
+import { StreakHeroCardSkeleton } from '@/components/streak-hero-card-skeleton';
 import { WeekStrip, type WeekStripDay } from '@/components/week-strip';
 import { Spacing } from '@/constants/theme';
 import { ThemedText } from '@/components/themed-text';
@@ -29,11 +30,13 @@ import {
 import { listHabits, type Habit } from '@/lib/habits';
 import {
   completeHabitWithPhoto,
+  listCompletionDatesByHabit,
   listDayActivity,
   listTodayCompletions,
   type DayActivity,
   type ProofLog,
 } from '@/lib/proofs';
+import { STREAK_LOOKBACK_DAYS, getEffectiveStreakCurrent } from '@/lib/streaks';
 import { listSkippedHabitIds, skipHabitForDay, unskipHabitForDay } from '@/lib/skips';
 
 const WEEK_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
@@ -82,6 +85,16 @@ export default function TodayScreen() {
   const [error, setError] = useState<string | null>(null);
   const [skipError, setSkipError] = useState<string | null>(null);
   const [completions, setCompletions] = useState<ReadonlyMap<string, ProofLog>>(new Map());
+  // Recent completed dates per habit (null = not loaded yet — fall back to the
+  // stored counters rather than zeroing streaks on a guess).
+  const [recentCompletions, setRecentCompletions] = useState<ReadonlyMap<
+    string,
+    ReadonlySet<IsoDate>
+  > | null>(null);
+  // True while that window is being read (or being retried). The hero renders
+  // its skeleton meanwhile: the stored counters it would otherwise fall back to
+  // are exactly the stale values the recency check is about to mask.
+  const [isStreakLoading, setIsStreakLoading] = useState(true);
   const [viewerRequest, setViewerRequest] = useState<ProofViewerRequest | null>(null);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   // The week strip selects a day to preview. Today is the default and the
@@ -99,6 +112,10 @@ export default function TodayScreen() {
     if (!hasLoadedRef.current) {
       setIsLoading(true);
     }
+    // The hero shows its skeleton for as long as the streak below is in
+    // flight — showing the stored counters first means flashing a value the
+    // recency check is about to reset (e.g. "1 day" after a missed day).
+    setIsStreakLoading(true);
     setError(null);
 
     const todayIso = getTodayIsoDate();
@@ -114,17 +131,33 @@ export default function TodayScreen() {
       }
       setError(result.error.message);
       setIsLoading(false);
+      // Nothing left to resolve the streak with; fall back to the counters.
+      setIsStreakLoading(false);
       return;
     }
 
     setHabits(result.data);
 
-    // Skip state lives in `habit_logs`, so it needs its own read. A failure
-    // here must not wipe the habit list — the cards simply render unskipped.
-    const skips = await listSkippedHabitIds(
-      result.data.map((habit) => habit.id),
-      todayIso,
-    );
+    // Skip state, today's completions and the streak recency window are three
+    // independent reads over `habit_logs`, so they go out together: the
+    // placeholders stay up until the slowest lands, and each failure stays
+    // isolated (a failure must never wipe the habit list — the cards simply
+    // render unskipped, pending, or with their stored counters).
+    const habitIds = result.data.map((habit) => habit.id);
+
+    const [skips, done, recent] = await Promise.all([
+      listSkippedHabitIds(habitIds, todayIso),
+      listTodayCompletions(habitIds, todayIso),
+      // Recency window for schedule-aware streaks: a stored streak only
+      // survives when the most recent *due* day was logged. `null` until it
+      // lands, so callers fall back to the stored counters rather than zeroing
+      // streaks on a guess.
+      listCompletionDatesByHabit(
+        habitIds,
+        addDays(todayIso, -(STREAK_LOOKBACK_DAYS - 1)),
+        todayIso,
+      ),
+    ]);
 
     if (!skips.ok) {
       if (__DEV__) {
@@ -134,13 +167,6 @@ export default function TodayScreen() {
       setSkippedIds(new Set(skips.data));
     }
 
-    // Completion state lives in `habit_logs` too. Failures here must not wipe
-    // the habit list — the cards simply render as pending.
-    const done = await listTodayCompletions(
-      result.data.map((habit) => habit.id),
-      todayIso,
-    );
-
     if (!done.ok) {
       if (__DEV__) {
         console.warn('[Today] listTodayCompletions failed:', done.error);
@@ -149,6 +175,17 @@ export default function TodayScreen() {
       setCompletions(done.data);
     }
 
+    if (!recent.ok) {
+      if (__DEV__) {
+        console.warn('[Today] listCompletionDatesByHabit failed:', recent.error);
+      }
+    } else {
+      setRecentCompletions(recent.data);
+    }
+
+    // The streak is resolved now: a failed window read keeps the previous value
+    // and the hero falls back to the stored counters.
+    setIsStreakLoading(false);
     setIsLoading(false);
   }, []);
 
@@ -190,9 +227,41 @@ export default function TodayScreen() {
     [activeHabits, completions],
   );
 
+  /**
+   * Schedule-aware streak per habit: masks a stale `streak_current` when the
+   * most recent due day was missed. Null until the recency window loads, so
+   * callers can fall back to the stored counters instead of flashing zeros.
+   */
+  const effectiveStreaks = useMemo(() => {
+    if (recentCompletions === null) {
+      return null;
+    }
+
+    const map = new Map<string, number>();
+
+    for (const habit of habits) {
+      const dates = new Set(recentCompletions.get(habit.id) ?? []);
+
+      // Today's completion map may already know about an optimistic
+      // completion the recency fetch has not seen yet.
+      if (completions.has(habit.id)) {
+        dates.add(todayIso);
+      }
+
+      map.set(habit.id, getEffectiveStreakCurrent(habit, todayIso, dates));
+    }
+
+    return map;
+  }, [completions, habits, recentCompletions, todayIso]);
+
+  const streakOf = useCallback(
+    (habit: Habit) => effectiveStreaks?.get(habit.id) ?? (habit.streak_current ?? 0),
+    [effectiveStreaks],
+  );
+
   const currentStreak = useMemo(
-    () => activeHabits.reduce((max, habit) => Math.max(max, habit.streak_current ?? 0), 0),
-    [activeHabits],
+    () => activeHabits.reduce((max, habit) => Math.max(max, streakOf(habit)), 0),
+    [activeHabits, streakOf],
   );
 
   /** Tracks the newest day read, so a slow one cannot overwrite a later pick. */
@@ -412,6 +481,19 @@ export default function TodayScreen() {
 
       setCompletions((current) => new Map(current).set(habitId, completed.data));
 
+      // Keep the recency window in sync so the hero updates immediately.
+      setRecentCompletions((current) => {
+        if (current === null) {
+          return current;
+        }
+
+        const next = new Map(current);
+        const dates = new Set(next.get(habitId) ?? []);
+        dates.add(todayIso);
+        next.set(habitId, dates);
+        return next;
+      });
+
       // Deleting the prior skip changes nothing; the completion adds +1, even
       // when the streak was zeroed by the skip. A fresh completion is +1 too.
       bumpLocalStreak(habitId, 1);
@@ -427,7 +509,7 @@ export default function TodayScreen() {
         return next;
       });
     },
-    [bumpLocalStreak, uploadingId],
+    [bumpLocalStreak, todayIso, uploadingId],
   );
 
   const handleViewProof = useCallback(
@@ -455,7 +537,7 @@ export default function TodayScreen() {
         habit={{
           title: habit.title,
           icon: habit.icon ?? 'flag',
-          streakDays: habit.streak_current ?? 0,
+          streakDays: streakOf(habit),
           color: habit.color,
         }}
         skipped={skipped}
@@ -467,7 +549,7 @@ export default function TodayScreen() {
         onViewProof={() => handleViewProof(habit.id)}
       />
     ),
-    [handlePress, handleProof, handleSkip, handleUnskip, handleViewProof],
+    [handlePress, handleProof, handleSkip, handleUnskip, handleViewProof, streakOf],
   );
 
   /**
@@ -485,7 +567,7 @@ export default function TodayScreen() {
           habit={{
             title: habit.title,
             icon: habit.icon ?? 'flag',
-            streakDays: habit.streak_current ?? 0,
+            streakDays: streakOf(habit),
             color: habit.color,
           }}
           skipped={status === 'skipped'}
@@ -495,20 +577,26 @@ export default function TodayScreen() {
         />
       );
     },
-    [dayStatusByHabit, handlePress],
+    [dayStatusByHabit, handlePress, streakOf],
   );
 
   return (
     <Screen scroll tabBar>
       <ScreenHeader title="Today" subtitle={dateLabel} />
 
-      <StreakHeroCard
-        streakDays={currentStreak}
-        progress={activeHabits.length === 0 ? 0 : completedHabits.length / activeHabits.length}
-        completedHabits={completedHabits.length}
-        totalHabits={activeHabits.length}
-        message={activeHabits.length === 0 ? 'Create your first habit' : "Let's crush today"}
-      />
+      {isStreakLoading ? (
+        <StreakHeroCardSkeleton />
+      ) : (
+        <StreakHeroCard
+          streakDays={currentStreak}
+          progress={
+            activeHabits.length === 0 ? 0 : completedHabits.length / activeHabits.length
+          }
+          completedHabits={completedHabits.length}
+          totalHabits={activeHabits.length}
+          message={activeHabits.length === 0 ? 'Create your first habit' : "Let's crush today"}
+        />
+      )}
 
       <WeekStrip week={week} selectedIso={selectedIso} onSelectDay={handleSelectDay} />
 

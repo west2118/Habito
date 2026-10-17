@@ -28,6 +28,10 @@ export type AuthErrorCode =
   | 'weak_password'
   /** Too many attempts from this client/IP; retry after the rate-limit window. */
   | 'over_request_rate_limit'
+  /** The 6-digit code is wrong or no longer valid. */
+  | 'otp_invalid'
+  /** The 15-minute verification window has passed; resend a fresh code. */
+  | 'otp_expired'
   /** New sign-ups are disabled in the Supabase project. */
   | 'signup_disabled'
   /** Input rejected before the request left the device. */
@@ -61,6 +65,8 @@ export const AUTH_ERROR_MESSAGES: Readonly<Record<AuthErrorCode, string>> = Obje
   email_address_invalid: 'That does not look like a valid email address.',
   weak_password: 'Choose a stronger password — at least 8 characters.',
   over_request_rate_limit: 'Too many attempts. Wait a moment and try again.',
+  otp_invalid: 'That code is incorrect or has expired. Check the digits, or resend a new code.',
+  otp_expired: 'That code expired after 15 minutes. Resend a new code below.',
   signup_disabled: 'Creating new accounts is currently unavailable.',
   validation_failed: 'Please check the details you entered.',
   network_error: 'No connection. Check your network and try again.',
@@ -90,6 +96,8 @@ const CODE_MAP: Readonly<Record<string, AuthErrorCode>> = Object.freeze({
   weak_password: 'weak_password',
   over_request_rate_limit: 'over_request_rate_limit',
   over_email_send_rate_limit: 'over_request_rate_limit',
+  otp_expired: 'otp_invalid',
+  otp_disabled: 'otp_invalid',
   signup_disabled: 'signup_disabled',
   email_provider_disabled: 'signup_disabled',
   validation_failed: 'validation_failed',

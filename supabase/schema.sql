@@ -331,12 +331,14 @@ create trigger habit_albums_set_updated_at
 -- ---------------------------------------------------------------------------
 -- Habit streak counters
 -- ---------------------------------------------------------------------------
--- A completed proof adds one to `streak_current` and carries `streak_longest`
--- with it; removing a completed log row takes one back off, floored at zero.
--- A skipped day breaks the streak instead: `streak_current` resets to 0 (no
--- increment), the pre-skip streak is kept on the log row for history, and
--- unskipping only re-opens the day without touching the streak. Mirrors
--- `supabase/migrations/20261009120005_skip_breaks_streak.sql`.
+-- A completed proof extends `streak_current` and carries `streak_longest`
+-- with it — unless the previous *due* day was missed, in which case the gap
+-- broke the streak and the counter restarts at 1. Removing a completed log
+-- row takes one back off, floored at zero. A skipped day breaks the streak
+-- instead: `streak_current` resets to 0 (no increment), the pre-skip streak
+-- is kept on the log row for history, and unskipping only re-opens the day
+-- without touching the streak. Mirrors
+-- `supabase/migrations/20261009120007_streak_gap_reset.sql`.
 create or replace function public.apply_habit_streak_change()
 returns trigger
 language plpgsql
@@ -345,13 +347,85 @@ set search_path = ''
 as $$
 declare
   prior_streak integer;
+  target_days jsonb;
+  prev_due date;
+  candidate date;
+  candidate_dow integer;
+  is_due boolean;
+  day_index integer;
+  has_prior_completion boolean;
+  has_prev_completion boolean;
 begin
   if TG_OP = 'INSERT' then
     if NEW.status = 'completed' then
-      update public.habits
-         set streak_current = streak_current + 1,
-             streak_longest = greatest(streak_longest, streak_current + 1)
+      -- Schedule for gap detection: Monday-first 0..6, matching the app.
+      select schedule -> 'target_days' into target_days
+        from public.habits
        where id = NEW.habit_id;
+
+      -- Most recent due day strictly before the logged date (up to 30 back,
+      -- so a once-a-week habit still finds its previous slot).
+      prev_due := null;
+
+      for day_index in 1..30 loop
+        candidate := (NEW.log_date - day_index);
+        candidate_dow := ((extract(isodow from candidate)::integer) - 1);
+
+        if target_days is null
+          or jsonb_typeof(target_days) <> 'array'
+          or jsonb_array_length(target_days) = 0 then
+          is_due := true;
+        else
+          is_due := target_days @> to_jsonb(candidate_dow);
+        end if;
+
+        if is_due then
+          prev_due := candidate;
+          exit;
+        end if;
+      end loop;
+
+      select exists (
+        select 1
+          from public.habit_logs
+         where habit_id = NEW.habit_id
+           and status = 'completed'
+           and log_date < NEW.log_date
+           and id <> NEW.id
+      ) into has_prior_completion;
+
+      if prev_due is not null then
+        select exists (
+          select 1
+            from public.habit_logs
+           where habit_id = NEW.habit_id
+             and status = 'completed'
+             and log_date = prev_due
+             and id <> NEW.id
+        ) into has_prev_completion;
+      else
+        -- No due history to judge by: keep the historic increment behaviour.
+        has_prev_completion := true;
+      end if;
+
+      if not has_prior_completion then
+        -- First proof ever: start at 1 even if the counter is stale.
+        update public.habits
+           set streak_current = 1,
+               streak_longest = greatest(streak_longest, 1)
+         where id = NEW.habit_id;
+      elsif prev_due is not null and not has_prev_completion then
+        -- Gap since the previous due day: the streak broke, restart at 1.
+        update public.habits
+           set streak_current = 1,
+               streak_longest = greatest(streak_longest, 1)
+         where id = NEW.habit_id;
+      else
+        update public.habits
+           set streak_current = streak_current + 1,
+               streak_longest = greatest(streak_longest, streak_current + 1)
+         where id = NEW.habit_id;
+      end if;
     elsif NEW.status = 'skipped' then
       -- A skipped day breaks the streak: no increment, straight to zero.
       select streak_current into prior_streak

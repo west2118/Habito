@@ -24,11 +24,16 @@ import {
 } from 'react';
 
 import {
+  confirmSignupCode as requestConfirmSignupCode,
+  createAuthError,
+  fail,
   getActiveSession,
+  ok,
   onAuthStateChange,
   signIn as requestSignIn,
   signOut as requestSignOut,
   signUp as requestSignUp,
+  verifySignUpCode as requestVerifySignUpCode,
   type AuthResult,
   type SignInInput,
   type SignUpInput,
@@ -43,6 +48,18 @@ export type AuthContextValue = {
   isLoading: boolean;
   signIn: (input: SignInInput) => Promise<AuthResult<Session>>;
   signUp: (input: SignUpInput) => Promise<AuthResult<SignUpOutput>>;
+  /** Confirms a new account with its 6-digit email code. */
+  verifySignUpCode: (email: string, code: string) => Promise<AuthResult<Session>>;
+  /**
+   * Completes gated sign-up: verifies the code (creating the account inside
+   * that call) and signs the new account straight in.
+   */
+  completeGatedSignup: (
+    email: string,
+    code: string,
+    password: string,
+    fullName?: string,
+  ) => Promise<AuthResult<Session>>;
   signOut: () => Promise<AuthResult<null>>;
 };
 
@@ -138,9 +155,47 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return result;
   }, []);
 
+  const verifySignUpCode = useCallback(async (email: string, code: string) => {
+    const result = await requestVerifySignUpCode(email, code);
+
+    // A verified code signs the new account straight in — the root guard
+    // moves it into the app on the next render.
+    if (result.ok) {
+      setSession(result.data);
+    }
+
+    return result;
+  }, []);
+
+  const completeGatedSignup = useCallback(
+    async (email: string, code: string, password: string, fullName?: string) => {
+      const confirmed = await requestConfirmSignupCode({ email, code, password, fullName });
+
+      if (!confirmed.ok) {
+        return confirmed;
+      }
+
+      // The account now exists (and only now): sign it in to issue the session.
+      const login = await requestSignIn({ email, password });
+
+      if (!login.ok) {
+        return fail(
+          createAuthError('unknown_error', {
+            message: 'Your account was created. Sign in with your password.',
+          }),
+        );
+      }
+
+      setSession(login.data);
+
+      return ok(login.data);
+    },
+    [],
+  );
+
   const value = useMemo<AuthContextValue>(
-    () => ({ session, isLoading, signIn, signUp, signOut }),
-    [isLoading, session, signIn, signUp, signOut],
+    () => ({ session, isLoading, signIn, signUp, signOut, verifySignUpCode, completeGatedSignup }),
+    [completeGatedSignup, isLoading, session, signIn, signUp, signOut, verifySignUpCode],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

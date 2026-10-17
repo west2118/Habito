@@ -15,6 +15,7 @@ import { listHabits } from '@/lib/habits/habits';
 import { toStatsError, type StatsResult } from '@/lib/stats/errors';
 import { addDays, getTodayIsoDate, type IsoDate } from '@/lib/dates';
 import { fail, ok } from '@/lib/result';
+import { getEffectiveStreakCurrent, STREAK_LOOKBACK_DAYS } from '@/lib/streaks';
 import { getSupabase } from '@/lib/supabase';
 
 /** Ranges offered by the Analytics switcher. */
@@ -74,8 +75,44 @@ export const getUserStats = async (range: StatsRange): Promise<StatsResult<UserS
     }
 
     const active = habitsResult.data.filter((habit) => !habit.is_archived);
-    const currentStreak = active.reduce((max, habit) => Math.max(max, habit.streak_current ?? 0), 0);
+    const storedBest = active.reduce((max, habit) => Math.max(max, habit.streak_current ?? 0), 0);
     const bestStreak = active.reduce((max, habit) => Math.max(max, habit.streak_longest ?? 0), 0);
+
+    // Schedule-aware current streak: a stored counter only counts when the
+    // habit's most recent *due* day was logged. Falls back to the stored max
+    // when the recency read fails, so a network error never flashes zeros.
+    let currentStreak = storedBest;
+
+    if (active.length > 0) {
+      const supabaseForStreak = await getSupabase();
+      const streakStart = addDays(endDate, -(STREAK_LOOKBACK_DAYS - 1));
+      const { data: streakRows, error: streakError } = await supabaseForStreak
+        .from('habit_logs')
+        .select('habit_id, log_date')
+        .eq('status', 'completed')
+        .gte('log_date', streakStart)
+        .lte('log_date', endDate)
+        .in(
+          'habit_id',
+          active.map((habit) => habit.id),
+        );
+
+      if (!streakError) {
+        const byHabit = new Map<string, Set<IsoDate>>();
+
+        for (const row of (streakRows ?? []) as { habit_id: string; log_date: IsoDate }[]) {
+          const set = byHabit.get(row.habit_id) ?? new Set<IsoDate>();
+          set.add(row.log_date);
+          byHabit.set(row.habit_id, set);
+        }
+
+        currentStreak = active.reduce(
+          (max, habit) =>
+            Math.max(max, getEffectiveStreakCurrent(habit, endDate, byHabit.get(habit.id) ?? new Set())),
+          0,
+        );
+      }
+    }
 
     const supabase = await getSupabase();
     const { data, error } = await supabase

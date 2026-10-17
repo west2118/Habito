@@ -95,17 +95,15 @@ const styles = StyleSheet.create({
   // --- Habito typography scale ---
   /** Welcome/brand wordmark. */
   hero: {
-    fontFamily: Fonts.serif,
+    fontFamily: Fonts.display,
     fontSize: 44,
     lineHeight: 52,
-    fontWeight: '700',
   },
-  /** Serif screen titles: Today, Timeline, Analytics, New habit. */
+  /** Display screen titles: Today, Timeline, Analytics, New habit. */
   screenTitle: {
-    fontFamily: Fonts.serif,
+    fontFamily: Fonts.display,
     fontSize: 34,
     lineHeight: 40,
-    fontWeight: '700',
   },
   /** Card/section headings. */
   section: {

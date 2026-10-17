@@ -160,9 +160,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarText: {
-    fontFamily: Fonts.serif,
+    fontFamily: Fonts.display,
     fontSize: 20,
-    fontWeight: '700',
     color: '#FFFFFF',
   },
   accountInfo: {

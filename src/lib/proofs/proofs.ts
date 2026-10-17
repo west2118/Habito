@@ -289,6 +289,50 @@ export const listTodayCompletions = async (
 };
 
 /**
+ * Returns completed dates per habit inside `[startIso, endIso]`.
+ *
+ * One query for the whole list, so streak recency (did yesterday's *due* day
+ * get logged?) never fans out into a request per card. Habits without a
+ * completion in the window are absent from the map.
+ */
+export const listCompletionDatesByHabit = async (
+  habitIds: string[],
+  startIso: IsoDate,
+  endIso: IsoDate,
+): Promise<ProofResult<Map<string, Set<IsoDate>>>> => {
+  try {
+    if (habitIds.length === 0) {
+      return ok(new Map());
+    }
+
+    const supabase = await getSupabase();
+    const { data, error } = await supabase
+      .from('habit_logs')
+      .select('habit_id, log_date')
+      .eq('status', 'completed')
+      .gte('log_date', startIso)
+      .lte('log_date', endIso)
+      .in('habit_id', habitIds);
+
+    if (error) {
+      return fail(toProofError(error));
+    }
+
+    const map = new Map<string, Set<IsoDate>>();
+
+    for (const row of (data ?? []) as { habit_id: string; log_date: IsoDate }[]) {
+      const set = map.get(row.habit_id) ?? new Set<IsoDate>();
+      set.add(row.log_date);
+      map.set(row.habit_id, set);
+    }
+
+    return ok(map);
+  } catch (error) {
+    return fail(toProofError(error));
+  }
+};
+
+/**
  * Mints a short-lived viewing URL for a stored proof photo.
  *
  * The bucket is private, so this — never a guessable public URL — is the only

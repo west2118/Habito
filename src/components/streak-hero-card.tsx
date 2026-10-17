@@ -4,6 +4,7 @@ import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-na
 
 import { ProgressBar, ProgressRing } from '@/components/ui';
 import { Radii, Spacing } from '@/constants/theme';
+import { streakUnit } from '@/lib/streaks';
 
 export type StreakHeroCardProps = {
   streakDays: number;
@@ -46,7 +47,7 @@ export function StreakHeroCard({
 
           <View style={styles.valueRow}>
             <Text style={styles.value}>{streakDays}</Text>
-            <Text style={styles.unit}>days</Text>
+            <Text style={styles.unit}>{streakUnit(streakDays)}</Text>
           </View>
 
           <Text style={styles.message}>{message}</Text>

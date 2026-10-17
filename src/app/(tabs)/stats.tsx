@@ -19,6 +19,7 @@ import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
 import { formatShortDate } from '@/lib/dates';
 import { STATS_RANGES, getUserStats, type StatsRange, type UserStats } from '@/lib/stats';
+import { streakUnit } from '@/lib/streaks';
 
 /** Bar chart of completed proofs per bucket in the selected range. */
 function ProofBars({ series }: { series: number[] }) {
@@ -160,12 +161,12 @@ export default function AnalyticsScreen() {
       ) : stats !== null ? (
         <>
           <View style={styles.grid}>
-            <StatCard icon="flame" tag="now" value={String(stats.currentStreak)} unit="days" label="Current streak" style={styles.gridItem} />
-            <StatCard icon="trophy" tag="PR" value={String(stats.bestStreak)} unit="days" label="Best streak" style={styles.gridItem} />
+            <StatCard icon="flame" tag="now" value={String(stats.currentStreak)} unit={streakUnit(stats.currentStreak)} label="Current streak" style={styles.gridItem} />
+            <StatCard icon="trophy" tag="PR" value={String(stats.bestStreak)} unit={streakUnit(stats.bestStreak)} label="Best streak" style={styles.gridItem} />
             <StatCard icon="checkmark-circle" tag="tracked" value={String(stats.totalHabits)} unit="active" label="Total habits" style={styles.gridItem} />
             <StatCard icon="stats-chart" tag="range" value={String(stats.completionRate)} unit="%" label="Completion rate" style={styles.gridItem} />
             <StatCard icon="camera" tag="logged" value={String(stats.totalProofs)} unit="photos" label="Total proofs" style={styles.gridItem} />
-            <StatCard icon="calendar" tag="days" value={String(stats.activeDays)} unit="days" label="Active days" style={styles.gridItem} />
+            <StatCard icon="calendar" tag="days" value={String(stats.activeDays)} unit={streakUnit(stats.activeDays)} label="Active days" style={styles.gridItem} />
           </View>
 
           <Card style={styles.volumeCard}>

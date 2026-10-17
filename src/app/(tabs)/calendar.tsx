@@ -204,6 +204,19 @@ export default function TimelineScreen() {
       ? Number(selectedIso.slice(8, 10))
       : undefined;
 
+  const sortedActivities = useMemo(() => {
+    return [...activities].sort((a, b) => {
+      // Completed (Done) habits at the top
+      if (a.status === 'completed' && b.status !== 'completed') {
+        return -1;
+      }
+      if (a.status !== 'completed' && b.status === 'completed') {
+        return 1;
+      }
+      return a.title.localeCompare(b.title);
+    });
+  }, [activities]);
+
   return (
     <Screen scroll tabBar>
       <ScreenHeader
@@ -254,7 +267,7 @@ export default function TimelineScreen() {
         />
       ) : (
         <View style={styles.list}>
-          {activities.map((activity) => (
+          {sortedActivities.map((activity) => (
             <ActivityRow key={activity.habitId} activity={activity} onViewProof={handleViewProof} />
           ))}
         </View>
